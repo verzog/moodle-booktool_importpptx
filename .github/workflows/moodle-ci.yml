@@ -45,9 +45,11 @@ jobs:
           MYSQL_COLLATION_SERVER: utf8mb4_unicode_ci
         ports:
           - 3306:3306
+        # Initialisation-aware check: passes only once InnoDB is ready on the TCP
+        # port, not while the entrypoint's temporary --skip-networking server runs.
         options: >-
-          --health-cmd="mysqladmin ping" --health-interval=10s
-          --health-timeout=5s --health-retries=3
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=5
 
       mysql:
         image: mysql:8.4
@@ -58,9 +60,11 @@ jobs:
         # Mapped to host 3307 so it doesn't clash with the mariadb service on 3306.
         ports:
           - 3307:3306
+        # Force a TCP ping so the check fails while the entrypoint's temporary
+        # --skip-networking server is up, and only passes once the port is live.
         options: >-
-          --health-cmd="mysqladmin ping" --health-interval=10s
-          --health-timeout=5s --health-retries=3
+          --health-cmd="mysqladmin ping -h 127.0.0.1"
+          --health-interval=10s --health-timeout=5s --health-retries=5
 
     strategy:
       fail-fast: false
@@ -85,7 +89,7 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
-          extensions: zip, xml, gd, mbstring, sodium, intl, soap, xmlrpc
+          extensions: zip, xml, gd, mbstring, sodium, intl, soap, xmlrpc, pgsql, mysqli
           # Moodle 5.2 requires max_input_vars of 7000 or higher.
           ini-values: max_input_vars=7000
           coverage: none
