@@ -11,17 +11,9 @@ Feature: Import a PowerPoint presentation into a book
     And the following "activities" exist:
       | activity | name      | intro           | course | idnumber |
       | book     | Test book | Book for import | C1     | book1    |
-    And I log in as "admin"
-    # A new book has no chapters and redirects to the add-chapter form; add one so
-    # the book's view page (with its actions menu) is shown.
-    And I am on the "Test book" "book activity" page
-    And I set the following fields to these values:
-      | Chapter title | First chapter       |
-      | Content       | Placeholder content |
-    And I press "Save changes"
 
   Scenario: Importing a deck creates a chapter per slide
-    When I follow "Import PowerPoint"
+    When I am on the "book1" "booktool_importpptx > Import" page logged in as "admin"
     And I upload "mod/book/tool/importpptx/tests/fixtures/sample.pptx" file to "PowerPoint presentation" filemanager
     And I press "Import"
     Then I should see "Create 9 chapters"
@@ -33,5 +25,5 @@ Feature: Import a PowerPoint presentation into a book
   Scenario: The importer can be disabled by an administrator
     Given the following config values are set as admin:
       | enabled | 0 | booktool_importpptx |
-    And I am on the "Test book" "book activity" page
-    Then "Import PowerPoint" "link" should not exist
+    When I am on the "book1" "booktool_importpptx > Import" page logged in as "admin"
+    Then I should not see "PowerPoint presentation"
