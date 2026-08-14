@@ -36,10 +36,8 @@ function booktool_importpptx_extend_settings_navigation(
     settings_navigation $settingsnav,
     navigation_node $booknode
 ) {
-    global $PAGE;
-
-    // Only show the action while we are inside a book activity with a course module.
-    if (empty($PAGE->cm) || $PAGE->cm->modname !== 'book') {
+    $page = $settingsnav->get_page();
+    if (empty($page->cm)) {
         return;
     }
 
@@ -50,11 +48,11 @@ function booktool_importpptx_extend_settings_navigation(
         return;
     }
 
-    if (!has_capability('booktool/importpptx:import', $PAGE->cm->context)) {
+    if (!has_capability('booktool/importpptx:import', $page->cm->context)) {
         return;
     }
 
-    $url = new moodle_url('/mod/book/tool/importpptx/index.php', ['id' => $PAGE->cm->id]);
+    $url = new moodle_url('/mod/book/tool/importpptx/index.php', ['id' => $page->cm->id]);
     $booknode->add(
         get_string('importpptx', 'booktool_importpptx'),
         $url,
