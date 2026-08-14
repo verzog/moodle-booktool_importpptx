@@ -220,6 +220,10 @@ class slide {
      */
     private function collect_shape(\DOMElement $sp, \DOMXPath $xpath, array &$out, ?array $tf = null): void {
         [$y, $x] = $this->offset($sp, $xpath, $tf);
+        // A shape can carry an image as a picture fill rather than as a <p:pic>;
+        // recover it for title and ordinary shapes alike (a title placeholder may
+        // still have a picture fill), so styled frames and placeholders are not lost.
+        $this->collect_shape_fill($sp, $xpath, $out, $y, $x);
         if ($this->is_title($sp, $xpath)) {
             $text = $this->raw_text($sp, $xpath);
             if ($text !== '') {
@@ -227,9 +231,6 @@ class slide {
             }
             return;
         }
-        // A shape can carry an image as a picture fill rather than as a <p:pic>;
-        // recover it so styled image frames and picture placeholders are not lost.
-        $this->collect_shape_fill($sp, $xpath, $out, $y, $x);
         $paras = $this->paragraphs($sp, $xpath);
         if (empty($paras)) {
             return;

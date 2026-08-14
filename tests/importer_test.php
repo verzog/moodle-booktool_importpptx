@@ -167,6 +167,24 @@ final class importer_test extends \advanced_testcase {
     }
 
     /**
+     * Blocks sharing an x (e.g. a picture fill and its text) stack, not columns.
+     */
+    public function test_same_x_blocks_are_not_columns(): void {
+        $builder = new html_builder('#442980');
+        $parsed = (object) [
+            'title' => 'Overlay',
+            'section' => null,
+            'blocks' => [
+                new block(block::TYPE_IMAGE, 2000000, 1000000, 'ppt/media/bg.png'),
+                new block(block::TYPE_TEXT, 2050000, 1000000, ['Caption over the picture fill.']),
+            ],
+        ];
+        $out = $builder->build($parsed);
+        $this->assertStringNotContainsString('booktool-importpptx-cols', $out->html);
+        $this->assertStringContainsString('<p>Caption over the picture fill.</p>', $out->html);
+    }
+
+    /**
      * SmartArt text is recovered as a flat list; tables become HTML tables.
      */
     public function test_smartart_and_table(): void {

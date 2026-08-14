@@ -38,6 +38,9 @@ class html_builder {
     /** @var int A single short line up to this length can be promoted to the chapter title. */
     const TITLE_FALLBACK_MAX_CHARS = 60;
 
+    /** @var int Minimum horizontal gap (EMU, ~1 inch) between blocks for a genuine column split. */
+    const COLUMN_GAP_EMU = 914400;
+
     /** @var string Fallback plate colour when a slide's own fill cannot be read. */
     private string $defaultcolour;
 
@@ -267,27 +270,58 @@ class html_builder {
     }
 
     /**
-     * Renders several same-row blocks as even-width Bootstrap columns.
+     * Renders same-row blocks as columns, but only when they occupy genuinely
+     * distinct horizontal regions; blocks sharing an x (stacked or overlaid, such
+     * as a picture fill and its text) are stacked in reading order instead.
      *
      * @param block[] $band The band's blocks, left to right.
      * @return string The row HTML.
      */
     private function render_columns(array $band): string {
-        $n = count($band);
-        if ($n > 4) {
-            // Too many to sit side by side cleanly; stack them full width.
+        $columns = $this->cluster_by_x($band);
+        // One horizontal group, or too many to sit side by side cleanly: just stack.
+        if (count($columns) < 2 || count($columns) > 4) {
             $stack = '';
             foreach ($band as $b) {
                 $stack .= $this->render_block($b);
             }
             return $stack;
         }
-        $col = 'col-12 col-md-' . intdiv(12, $n);
+        $col = 'col-12 col-md-' . intdiv(12, count($columns));
         $cells = '';
-        foreach ($band as $b) {
-            $cells .= '<div class="' . $col . '">' . $this->render_cell($b) . '</div>';
+        foreach ($columns as $group) {
+            $inner = '';
+            foreach ($group as $b) {
+                $inner .= $this->render_cell($b);
+            }
+            $cells .= '<div class="' . $col . '">' . $inner . '</div>';
         }
         return '<div class="row g-3 mb-3 booktool-importpptx-cols">' . $cells . '</div>';
+    }
+
+    /**
+     * Groups a band's blocks into horizontal clusters (columns): consecutive
+     * blocks whose x offsets are within {@see self::COLUMN_GAP_EMU} share a column.
+     *
+     * @param block[] $band The band's blocks, sorted left to right.
+     * @return array[] A list of columns, each a block[] in reading order.
+     */
+    private function cluster_by_x(array $band): array {
+        $clusters = [];
+        $current = [];
+        $lastx = null;
+        foreach ($band as $b) {
+            if ($lastx !== null && $b->x - $lastx > self::COLUMN_GAP_EMU && $current !== []) {
+                $clusters[] = $current;
+                $current = [];
+            }
+            $current[] = $b;
+            $lastx = $b->x;
+        }
+        if ($current !== []) {
+            $clusters[] = $current;
+        }
+        return $clusters;
     }
 
     /**
