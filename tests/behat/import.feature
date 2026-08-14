@@ -15,16 +15,10 @@ Feature: Import a PowerPoint presentation into a book
   @javascript
   Scenario: Importing a deck creates a chapter per slide
     When I am on the "book1" "booktool_importpptx > Import" page logged in as "admin"
-    And I upload "mod/book/tool/importpptx/tests/fixtures/sample.pptx" file to "PowerPoint presentation" filemanager
+    And I upload "mod/book/tool/importpptx/tests/fixtures/sample.pptx" file to "PowerPoint or PDF file" filemanager
     And I press "Import"
     Then I should see "Create 9 chapters"
     When I press "Continue"
     Then I should see "Imported 9 chapters"
     And I should see "Overview"
     And I should see "Getting Started"
-
-  Scenario: The importer can be disabled by an administrator
-    Given the following config values are set as admin:
-      | enabled | 0 | booktool_importpptx |
-    When I am on the "book1" "booktool_importpptx > Import" page logged in as "admin"
-    Then I should not see "PowerPoint presentation"

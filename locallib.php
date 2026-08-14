@@ -34,6 +34,7 @@
  * @param context_module $context The book's module context.
  * @param stdClass|cm_info $cm The book's course module.
  * @param int $pendingid The staged upload's item id (for cleanup and the async task).
+ * @param array $options Import options ('imagemaxdim' int, 'sectioncolour' string).
  * @return stdClass Object with properties queued (bool) and count (int slides/chapters).
  */
 function booktool_importpptx_process(
@@ -41,25 +42,63 @@ function booktool_importpptx_process(
     stdClass $book,
     context_module $context,
     $cm,
-    int $pendingid
+    int $pendingid,
+    array $options = []
 ): stdClass {
     global $USER;
 
-    // Fall back to the shipped default when the setting has not been stored yet.
+    // Presentations above this many slides import in the background. There is no
+    // admin settings page for booktools, so this uses a sensible fixed default
+    // (overridable via forced_plugin_settings / the CLI if a site needs to).
     $threshold = get_config('booktool_importpptx', 'asyncthreshold');
     $threshold = ($threshold === false || $threshold === '') ? 30 : (int) $threshold;
-    $count = \booktool_importpptx\importer::count_slides($file);
+    $count = booktool_importpptx_count($file);
 
     if ($count > $threshold) {
         $task = new \booktool_importpptx\task\import_task();
-        $task->set_custom_data(['bookid' => $book->id, 'cmid' => $cm->id, 'fileitemid' => $pendingid]);
+        $task->set_custom_data([
+            'bookid' => $book->id,
+            'cmid' => $cm->id,
+            'fileitemid' => $pendingid,
+            'type' => booktool_importpptx_type($file),
+            'imagemaxdim' => (int) ($options['imagemaxdim'] ?? 1600),
+            'sectioncolour' => (string) ($options['sectioncolour'] ?? '#442980'),
+        ]);
         $task->set_userid($USER->id);
         \core\task\manager::queue_adhoc_task($task);
         return (object) ['queued' => true, 'count' => $count];
     }
 
-    $importer = new \booktool_importpptx\importer($book, $context);
+    if (booktool_importpptx_type($file) === 'pdf') {
+        $importer = new \booktool_importpptx\pdf_importer($book, $context, $options);
+    } else {
+        $importer = new \booktool_importpptx\importer($book, $context, $options);
+    }
     $created = $importer->import($file);
     \booktool_importpptx\pending_file::delete($context, $pendingid);
     return (object) ['queued' => false, 'count' => $created];
+}
+
+/**
+ * Returns the backend type for an uploaded file, by extension.
+ *
+ * @param stored_file $file The uploaded file.
+ * @return string 'pdf' for PDFs, otherwise 'pptx'.
+ */
+function booktool_importpptx_type(stored_file $file): string {
+    $ext = strtolower(pathinfo($file->get_filename(), PATHINFO_EXTENSION));
+    return $ext === 'pdf' ? 'pdf' : 'pptx';
+}
+
+/**
+ * Counts the units (slides or pages) an upload will produce, per backend.
+ *
+ * @param stored_file $file The uploaded file.
+ * @return int The number of chapters the import will create.
+ */
+function booktool_importpptx_count(stored_file $file): int {
+    if (booktool_importpptx_type($file) === 'pdf') {
+        return \booktool_importpptx\pdf_importer::count_pages($file);
+    }
+    return \booktool_importpptx\importer::count_slides($file);
 }

@@ -9,6 +9,10 @@ jobs:
   test:
     runs-on: ubuntu-22.04
 
+    # Australian timezone so date/time tests respect AEST/AWST offsets (see CLAUDE §1).
+    env:
+      TZ: Australia/Sydney
+
     services:
       postgres:
         image: postgres:14
@@ -58,6 +62,9 @@ jobs:
           extensions: zip, gd, dom, xml, mbstring, pgsql, mysqli
           ini-values: max_input_vars=5000
           coverage: none
+
+      - name: Install poppler-utils (PDF backend)
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils
 
       - name: Initialise moodle-plugin-ci
         run: |

@@ -211,7 +211,7 @@ class package {
      * Resolves the relationships (.rels) for a given part.
      *
      * @param string $partpath Zip path of the part whose rels are wanted.
-     * @return array<string,string> Map of relationship id to resolved zip path.
+     * @return array Map of relationship id to resolved zip path.
      */
     public function get_rels(string $partpath): array {
         $dir = dirname($partpath);

@@ -41,7 +41,7 @@ class html_builder {
     /** @var string Fallback plate colour when a slide's own fill cannot be read. */
     private string $defaultcolour;
 
-    /** @var array<string,string> Map of chapter filename => source media path in the package. */
+    /** @var array Map of chapter filename => source media path in the package. */
     private array $images = [];
 
     /**
@@ -294,7 +294,7 @@ class html_builder {
      * image caption or footer further down cannot be pulled out of the body.
      *
      * @param block[] $blocks Blocks in reading order.
-     * @return array{0:?string,1:block[]} The [title, remaining-blocks] pair.
+     * @return array The [title, remaining-blocks] pair.
      */
     private function promote_title(array $blocks): array {
         if (empty($blocks)) {

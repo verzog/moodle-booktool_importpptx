@@ -63,23 +63,23 @@ class import_task extends \core\task\adhoc_task {
         }
         $context = \context_module::instance($cm->id);
 
-        // Honour the kill-switch even for already-queued imports: if an administrator
-        // disabled the importer after queuing, abort and clean up without importing.
-        $enabled = get_config('booktool_importpptx', 'enabled');
-        if ($enabled !== false && empty($enabled)) {
-            mtrace("booktool_importpptx: importer disabled, skipping queued import for book {$book->id}.");
-            \booktool_importpptx\pending_file::delete($context, $itemid);
-            return;
-        }
-
         $file = \booktool_importpptx\pending_file::get($context, $itemid);
         if ($file === null) {
             return;
         }
 
+        $options = [
+            'imagemaxdim' => (int) ($data->imagemaxdim ?? 1600),
+            'sectioncolour' => (string) ($data->sectioncolour ?? '#442980'),
+        ];
+
         // Do not delete the staged upload in a finally: if the import throws on a
         // transient error, Moodle retries the adhoc task and needs the input intact.
-        $importer = new importer($book, $context);
+        if (($data->type ?? 'pptx') === 'pdf') {
+            $importer = new \booktool_importpptx\pdf_importer($book, $context, $options);
+        } else {
+            $importer = new importer($book, $context, $options);
+        }
         $count = $importer->import($file);
         mtrace("booktool_importpptx: imported {$count} chapters into book {$book->id}.");
         \booktool_importpptx\pending_file::delete($context, $itemid);

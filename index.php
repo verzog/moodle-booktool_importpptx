@@ -44,18 +44,6 @@ $PAGE->set_heading($course->fullname);
 $PAGE->set_activity_record($book);
 $PAGE->navbar->add(get_string('importpptx', 'booktool_importpptx'));
 
-// Kill-switch: refuse only when an administrator has explicitly disabled the
-// importer; an unset value means the default (enabled) applies.
-$enabled = get_config('booktool_importpptx', 'enabled');
-if ($enabled !== false && empty($enabled)) {
-    redirect(
-        $returnurl,
-        get_string('disabled', 'booktool_importpptx'),
-        null,
-        \core\output\notification::NOTIFY_ERROR
-    );
-}
-
 // Do not allow a second import while one is already queued for this book.
 if (\booktool_importpptx\task\import_task::is_queued($book->id)) {
     redirect(
@@ -73,7 +61,8 @@ if ($cancelpending) {
     redirect($returnurl);
 }
 
-$mform = new \booktool_importpptx\form\import_form(null, ['id' => $cm->id]);
+$pdfenabled = \booktool_importpptx\pdf\renderer::is_available();
+$mform = new \booktool_importpptx\form\import_form(null, ['id' => $cm->id, 'pdfenabled' => $pdfenabled]);
 if ($mform->is_cancelled()) {
     redirect($returnurl);
 }
@@ -90,7 +79,11 @@ if (optional_param('confirm', 0, PARAM_BOOL) && confirm_sesskey()) {
             \core\output\notification::NOTIFY_ERROR
         );
     }
-    $result = booktool_importpptx_process($file, $book, $context, $cm, $pendingid);
+    $options = [
+        'imagemaxdim' => optional_param('imagemaxdim', 1600, PARAM_INT),
+        'sectioncolour' => optional_param('sectioncolour', '#442980', PARAM_TEXT),
+    ];
+    $result = booktool_importpptx_process($file, $book, $context, $cm, $pendingid, $options);
     if ($result->queued) {
         redirect(
             $returnurl,
@@ -120,14 +113,30 @@ if ($data = $mform->get_data()) {
         );
     }
 
+    if (booktool_importpptx_type($file) === 'pdf' && !$pdfenabled) {
+        \booktool_importpptx\pending_file::delete($context, $pendingid);
+        redirect(
+            $PAGE->url,
+            get_string('errorpdfunavailable', 'booktool_importpptx'),
+            null,
+            \core\output\notification::NOTIFY_ERROR
+        );
+    }
+
     try {
-        $count = \booktool_importpptx\importer::count_slides($file);
+        $count = booktool_importpptx_count($file);
     } catch (\moodle_exception $e) {
         \booktool_importpptx\pending_file::delete($context, $pendingid);
         redirect($PAGE->url, $e->getMessage(), null, \core\output\notification::NOTIFY_ERROR);
     }
 
-    $continueurl = new moodle_url($PAGE->url, ['id' => $cm->id, 'confirm' => 1, 'pendingid' => $pendingid]);
+    $continueurl = new moodle_url($PAGE->url, [
+        'id' => $cm->id,
+        'confirm' => 1,
+        'pendingid' => $pendingid,
+        'imagemaxdim' => (int) $data->imagemaxdim,
+        'sectioncolour' => (string) $data->sectioncolour,
+    ]);
     $cancelurl = new moodle_url($PAGE->url, ['id' => $cm->id, 'cancelpending' => $pendingid]);
     echo $OUTPUT->header();
     echo $OUTPUT->heading(get_string('confirmimport', 'booktool_importpptx'));

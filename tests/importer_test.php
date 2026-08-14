@@ -245,6 +245,112 @@ final class importer_test extends \advanced_testcase {
     }
 
     /**
+     * The backend is chosen by file extension.
+     */
+    public function test_backend_type_detection(): void {
+        global $CFG;
+        $this->resetAfterTest();
+        require_once($CFG->dirroot . '/mod/book/tool/importpptx/locallib.php');
+
+        $this->assertSame('pdf', booktool_importpptx_type($this->make_named_file('doc.pdf', '%PDF-1.4')));
+        $this->assertSame('pptx', booktool_importpptx_type($this->make_named_file('deck.pptx', 'x')));
+    }
+
+    /**
+     * When poppler is available, a PDF imports one image chapter per page.
+     */
+    public function test_pdf_import(): void {
+        global $DB;
+        $this->resetAfterTest();
+        if (!\booktool_importpptx\pdf\renderer::is_available()) {
+            $this->markTestSkipped('The poppler utilities (pdfinfo, pdftoppm) are not installed on this host.');
+        }
+
+        $course = $this->getDataGenerator()->create_course();
+        $book = $this->getDataGenerator()->create_module('book', ['course' => $course->id]);
+        $context = \context_module::instance($book->cmid);
+        $record = $DB->get_record('book', ['id' => $book->id], '*', MUST_EXIST);
+
+        $file = $this->make_named_file('doc.pdf', $this->make_pdf(3), $record->id, $context);
+        $this->assertSame(3, \booktool_importpptx\pdf_importer::count_pages($file));
+
+        $importer = new \booktool_importpptx\pdf_importer($record, $context, ['imagemaxdim' => 1000]);
+        $this->assertSame(3, $importer->import($file));
+
+        $chapters = array_values($DB->get_records(
+            'book_chapters',
+            ['bookid' => $record->id, 'importsrc' => 'doc.pdf'],
+            'pagenum ASC'
+        ));
+        $this->assertCount(3, $chapters);
+        $this->assertStringContainsString('@@PLUGINFILE@@/page-1.', $chapters[0]->content);
+        $fs = get_file_storage();
+        $files = $fs->get_area_files($context->id, 'mod_book', 'chapter', $chapters[0]->id, 'id', false);
+        $this->assertNotEmpty($files);
+    }
+
+    /**
+     * Builds a valid PDF with the given number of blank pages.
+     *
+     * @param int $pages The number of pages.
+     * @return string The PDF bytes.
+     */
+    private function make_pdf(int $pages): string {
+        $objs = [
+            1 => '<</Type/Catalog/Pages 2 0 R>>',
+        ];
+        $kids = [];
+        for ($i = 0; $i < $pages; $i++) {
+            $kids[] = (3 + $i) . ' 0 R';
+            $objs[3 + $i] = '<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]>>';
+        }
+        $objs[2] = '<</Type/Pages/Kids[' . implode(' ', $kids) . ']/Count ' . $pages . '>>';
+        ksort($objs);
+
+        $pdf = "%PDF-1.4\n";
+        $offsets = [];
+        foreach ($objs as $num => $body) {
+            $offsets[$num] = strlen($pdf);
+            $pdf .= $num . " 0 obj\n" . $body . "\nendobj\n";
+        }
+        $xrefpos = strlen($pdf);
+        $size = count($objs) + 1;
+        $pdf .= "xref\n0 " . $size . "\n0000000000 65535 f \n";
+        for ($n = 1; $n < $size; $n++) {
+            $pdf .= sprintf("%010d 00000 n \n", $offsets[$n]);
+        }
+        $pdf .= "trailer\n<</Size " . $size . "/Root 1 0 R>>\nstartxref\n" . $xrefpos . "\n%%EOF";
+        return $pdf;
+    }
+
+    /**
+     * Stores a named file with the given content in the plugin's import area.
+     *
+     * @param string $filename The file name (its extension drives backend selection).
+     * @param string $content The file bytes.
+     * @param int|null $itemid Item id to store under.
+     * @param \context|null $context Context to store in (defaults to system).
+     * @return \stored_file
+     */
+    private function make_named_file(
+        string $filename,
+        string $content,
+        ?int $itemid = null,
+        ?\context $context = null
+    ): \stored_file {
+        $context = $context ?? \context_system::instance();
+        $fs = get_file_storage();
+        return $fs->create_file_from_string([
+            'contextid' => $context->id,
+            'component' => 'booktool_importpptx',
+            'filearea' => 'import',
+            'itemid' => $itemid ?? 1,
+            'filepath' => '/',
+            'filename' => $filename,
+        ], $content);
+    }
+
+    /**
      * Builds a stored_file from the fixture in the plugin's import area.
      *
      * @param int|null $bookid Item id to store under (defaults to a constant).

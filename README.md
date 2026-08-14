@@ -7,10 +7,15 @@ HTML that a teacher can keep editing in Atto or TinyMCE — not flat page images
 
 ## Why it runs anywhere
 
-The importer is **pure PHP**. A `.pptx` is a ZIP of XML, and this plugin reads it
-with PHP's bundled `ZipArchive` and `DOMDocument` only. There are **no external
-binaries** (no LibreOffice, Ghostscript or `unoconv`), no shell-outs and no
-third-party libraries, so it works on shared and locked-down hosting.
+The PowerPoint importer is **pure PHP**. A `.pptx` is a ZIP of XML, and this plugin
+reads it with PHP's bundled `ZipArchive` and `DOMDocument` only. There are **no
+external binaries** (no LibreOffice, Ghostscript or `unoconv`), no shell-outs and no
+third-party libraries on this path, so it works on shared and locked-down hosting.
+
+The optional **PDF backend** is different: a PDF has no editable structure to
+recover, so pages are rasterised to images. That needs the `poppler-utils` binaries
+(`pdfinfo`, `pdftoppm`), which most Linux hosts already ship. When they are not
+present the PDF option simply does not appear — the PowerPoint path is unaffected.
 
 ## What it does
 
@@ -35,15 +40,32 @@ third-party libraries, so it works on shared and locked-down hosting.
   geometry, using the slide's own fill colour) becomes a styled section chapter,
   and the slides that follow it are nested as subchapters in the book's table of
   contents.
-- **Large decks.** Above a configurable slide threshold the import runs as a
-  background task; a confirmation step and an administrator kill-switch guard the
-  action.
+- **Large decks.** Above a fixed slide threshold (30) the import runs as a
+  background task, with a confirmation step before any chapters are written.
+
+## PDF import (optional)
+
+When the `poppler-utils` binaries are available on the server, the import form also
+accepts a `.pdf`. Because a PDF carries no reliable text or layout structure, each
+page is **rendered to a web image** (WebP where GD supports it, otherwise JPEG) and
+becomes one chapter — one page → one chapter, in order. These chapters are images
+rather than editable HTML, so use PDF import when you want a faithful page-by-page
+copy and PowerPoint import when you want editable text.
+
+- Rendering is done with `pdfinfo` and `pdftoppm` at 150 DPI, invoked with argument
+  arrays (never a shell string), so there is no command-injection surface.
+- Images honour the same **Maximum image dimension** option as slide images.
+- A hard cap of 500 pages guards against abusive uploads.
+- If the binaries live outside the system path, set their directory in
+  `$CFG->forced_plugin_settings['booktool_importpptx']['popplerpath']`.
 
 ## Requirements
 
 - Moodle 5.0 or later
 - PHP 8.2 or later
 - The `zip`, `dom` and (for optional image down-scaling) `gd` PHP extensions
+- **Optional, for PDF import only:** the `poppler-utils` package (`pdfinfo`,
+  `pdftoppm`) and the `gd` extension
 
 ## Installation
 
@@ -55,23 +77,28 @@ Copy the plugin so it lives at `mod/book/tool/importpptx/` (or
 
 1. Open a Book activity as a teacher.
 2. From the book's administration, choose **Import PowerPoint**.
-3. Upload a `.pptx` file and confirm the number of chapters to create.
+3. Upload a `.pptx` file (or a `.pdf` when the PDF backend is available) and confirm
+   the number of chapters to create.
 4. The new chapters are added after any existing ones.
 
-## Settings
+## Import options
 
-**Site administration → Plugins → Activity modules → Book → PowerPoint import**
+Book tools cannot expose a Site administration settings page (the Book module
+does not load subplugin settings), so the tunable options live on the import
+form itself, under **Show more**:
 
-- **Enable importer** — a kill-switch that hides the action site-wide.
-- **Section panel colour** — fallback plate colour when a slide's own fill cannot
-  be read.
 - **Maximum image dimension (px)** — down-scale images on import (`0` keeps
-  originals).
-- **Background task threshold** — decks larger than this import in the background.
+  originals). Default 1600.
+- **Section panel colour** — fallback plate colour (e.g. `#442980`) used only
+  when a section slide's own fill cannot be read.
+
+Access to the importer is controlled by the `booktool/importpptx:import`
+capability. The background-task threshold defaults to 30 slides.
 
 ## Honest limits
 
-- PowerPoint `.pptx` only; **PDF is not supported**.
+- PowerPoint gives **editable** chapters; PDF gives **image** chapters (one
+  rendered page each) and needs `poppler-utils` on the server.
 - SmartArt is flattened to a list — its hierarchy is not preserved.
 - Grids re-flow images into an even layout rather than reproducing a slide's exact
   geometry.
