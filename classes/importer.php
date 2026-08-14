@@ -38,15 +38,25 @@ class importer {
     /** @var \context_module The book's module context. */
     private \context_module $context;
 
+    /** @var string Section-plate colour chosen for this import. */
+    private string $sectioncolour;
+
+    /** @var int Maximum image dimension in px for this import (0 keeps originals). */
+    private int $imagemaxdim;
+
     /**
      * Constructor.
      *
      * @param \stdClass $book The book activity record.
      * @param \context_module $context The book's module context.
+     * @param array $options Import options: 'sectioncolour' (string) and 'imagemaxdim' (int).
      */
-    public function __construct(\stdClass $book, \context_module $context) {
+    public function __construct(\stdClass $book, \context_module $context, array $options = []) {
         $this->book = $book;
         $this->context = $context;
+        $colour = (string) ($options['sectioncolour'] ?? '#442980');
+        $this->sectioncolour = $colour === '' ? '#442980' : $colour;
+        $this->imagemaxdim = (int) ($options['imagemaxdim'] ?? 1600);
     }
 
     /**
@@ -74,15 +84,10 @@ class importer {
     public function import(\stored_file $pptx): int {
         global $DB;
 
-        $maxdim = (int) get_config('booktool_importpptx', 'imagemaxdim');
-        $defaultcolour = (string) get_config('booktool_importpptx', 'sectionpanelcolour');
-        if ($defaultcolour === '') {
-            $defaultcolour = '#442980';
-        }
-
+        $maxdim = $this->imagemaxdim;
         $path = self::stage($pptx);
         $package = new package($path);
-        $builder = new html_builder($defaultcolour);
+        $builder = new html_builder($this->sectioncolour);
 
         try {
             $slidepaths = $package->get_slide_paths();

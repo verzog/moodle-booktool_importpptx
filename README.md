@@ -35,9 +35,8 @@ third-party libraries, so it works on shared and locked-down hosting.
   geometry, using the slide's own fill colour) becomes a styled section chapter,
   and the slides that follow it are nested as subchapters in the book's table of
   contents.
-- **Large decks.** Above a configurable slide threshold the import runs as a
-  background task; a confirmation step and an administrator kill-switch guard the
-  action.
+- **Large decks.** Above a fixed slide threshold (30) the import runs as a
+  background task, with a confirmation step before any chapters are written.
 
 ## Requirements
 
@@ -58,16 +57,19 @@ Copy the plugin so it lives at `mod/book/tool/importpptx/` (or
 3. Upload a `.pptx` file and confirm the number of chapters to create.
 4. The new chapters are added after any existing ones.
 
-## Settings
+## Import options
 
-**Site administration → Plugins → Activity modules → Book → PowerPoint import**
+Book tools cannot expose a Site administration settings page (the Book module
+does not load subplugin settings), so the tunable options live on the import
+form itself, under **Show more**:
 
-- **Enable importer** — a kill-switch that hides the action site-wide.
-- **Section panel colour** — fallback plate colour when a slide's own fill cannot
-  be read.
 - **Maximum image dimension (px)** — down-scale images on import (`0` keeps
-  originals).
-- **Background task threshold** — decks larger than this import in the background.
+  originals). Default 1600.
+- **Section panel colour** — fallback plate colour (e.g. `#442980`) used only
+  when a section slide's own fill cannot be read.
+
+Access to the importer is controlled by the `booktool/importpptx:import`
+capability. The background-task threshold defaults to 30 slides.
 
 ## Honest limits
 

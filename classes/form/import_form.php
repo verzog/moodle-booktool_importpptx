@@ -46,6 +46,25 @@ class import_form extends \moodleform {
         $mform->addRule('pptxfile', null, 'required', null, 'client');
         $mform->addHelpButton('pptxfile', 'file', 'booktool_importpptx');
 
+        // Advanced, per-import options (booktool subplugins cannot expose site
+        // admin settings, so the tunables live on the import form instead).
+        $mform->addElement('text', 'imagemaxdim', get_string('optionimagemaxdim', 'booktool_importpptx'));
+        $mform->setType('imagemaxdim', PARAM_INT);
+        $mform->setDefault('imagemaxdim', 1600);
+        $mform->addHelpButton('imagemaxdim', 'optionimagemaxdim', 'booktool_importpptx');
+        $mform->setAdvanced('imagemaxdim');
+
+        $mform->addElement(
+            'text',
+            'sectioncolour',
+            get_string('optionsectioncolour', 'booktool_importpptx'),
+            ['size' => 8, 'maxlength' => 7]
+        );
+        $mform->setType('sectioncolour', PARAM_TEXT);
+        $mform->setDefault('sectioncolour', '#442980');
+        $mform->addHelpButton('sectioncolour', 'optionsectioncolour', 'booktool_importpptx');
+        $mform->setAdvanced('sectioncolour');
+
         $mform->addElement('hidden', 'id', $this->_customdata['id']);
         $mform->setType('id', PARAM_INT);
 

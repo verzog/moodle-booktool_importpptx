@@ -41,13 +41,6 @@ function booktool_importpptx_extend_settings_navigation(
         return;
     }
 
-    // Respect the site-wide kill-switch, but only when an administrator has
-    // explicitly disabled it; an unset value means the default (enabled) applies.
-    $enabled = get_config('booktool_importpptx', 'enabled');
-    if ($enabled !== false && empty($enabled)) {
-        return;
-    }
-
     if (!has_capability('booktool/importpptx:import', $page->cm->context)) {
         return;
     }
