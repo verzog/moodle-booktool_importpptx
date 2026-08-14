@@ -21,7 +21,7 @@ Feature: Import a PowerPoint presentation into a book
     And I press "Save changes"
 
   Scenario: Importing a deck creates a chapter per slide
-    When I navigate to "Import PowerPoint" in current page administration
+    When I follow "Import PowerPoint"
     And I upload "mod/book/tool/importpptx/tests/fixtures/sample.pptx" file to "PowerPoint presentation" filemanager
     And I press "Import"
     Then I should see "Create 9 chapters"
