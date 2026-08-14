@@ -27,7 +27,9 @@ namespace booktool_importpptx;
 /**
  * Stores the uploaded .pptx in the module context so that both the confirmation
  * step and a later background task can read it, independent of the user's
- * transient draft file area. One pending upload per book (keyed by book id).
+ * transient draft file area. Each upload is kept under its own item id (the
+ * unique draft id) so concurrent uploads to the same book never overwrite one
+ * another, and a confirmation always imports exactly the deck it previewed.
  */
 class pending_file {
     /** @var string The file component. */
@@ -37,14 +39,13 @@ class pending_file {
     const FILEAREA = 'import';
 
     /**
-     * Copies a draft-area upload into durable storage, replacing any existing one.
+     * Copies a draft-area upload into durable storage keyed by the draft id.
      *
-     * @param int $draftid The submitted draft item id.
+     * @param int $draftid The submitted draft item id (also used as the storage item id).
      * @param \context_module $context The book's module context.
-     * @param int $bookid The book id (used as the item id).
      * @return \stored_file|null The stored file, or null if the draft was empty.
      */
-    public static function store(int $draftid, \context_module $context, int $bookid): ?\stored_file {
+    public static function store(int $draftid, \context_module $context): ?\stored_file {
         global $USER;
 
         $fs = get_file_storage();
@@ -55,12 +56,12 @@ class pending_file {
             return null;
         }
 
-        self::delete($context, $bookid);
+        self::delete($context, $draftid);
         $filerecord = [
             'contextid' => $context->id,
             'component' => self::COMPONENT,
             'filearea' => self::FILEAREA,
-            'itemid' => $bookid,
+            'itemid' => $draftid,
             'filepath' => '/',
             'filename' => $draft->get_filename(),
         ];
@@ -68,28 +69,28 @@ class pending_file {
     }
 
     /**
-     * Returns the pending upload for a book, if any.
+     * Returns a staged upload by its item id, if present.
      *
      * @param \context_module $context The book's module context.
-     * @param int $bookid The book id.
+     * @param int $itemid The staged upload's item id (the draft id used at upload).
      * @return \stored_file|null The stored file, or null when none is staged.
      */
-    public static function get(\context_module $context, int $bookid): ?\stored_file {
+    public static function get(\context_module $context, int $itemid): ?\stored_file {
         $fs = get_file_storage();
-        $files = $fs->get_area_files($context->id, self::COMPONENT, self::FILEAREA, $bookid, 'id DESC', false);
+        $files = $fs->get_area_files($context->id, self::COMPONENT, self::FILEAREA, $itemid, 'id DESC', false);
         $file = reset($files);
         return $file ?: null;
     }
 
     /**
-     * Deletes any pending upload for a book.
+     * Deletes a staged upload by its item id.
      *
      * @param \context_module $context The book's module context.
-     * @param int $bookid The book id.
+     * @param int $itemid The staged upload's item id.
      * @return void
      */
-    public static function delete(\context_module $context, int $bookid): void {
+    public static function delete(\context_module $context, int $itemid): void {
         $fs = get_file_storage();
-        $fs->delete_area_files($context->id, self::COMPONENT, self::FILEAREA, $bookid);
+        $fs->delete_area_files($context->id, self::COMPONENT, self::FILEAREA, $itemid);
     }
 }

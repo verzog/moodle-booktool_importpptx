@@ -66,15 +66,22 @@ if (\booktool_importpptx\task\import_task::is_queued($book->id)) {
     );
 }
 
+// Cancelling the confirmation step removes the staged upload it was about to import.
+$cancelpending = optional_param('cancelpending', 0, PARAM_INT);
+if ($cancelpending) {
+    \booktool_importpptx\pending_file::delete($context, $cancelpending);
+    redirect($returnurl);
+}
+
 $mform = new \booktool_importpptx\form\import_form(null, ['id' => $cm->id]);
 if ($mform->is_cancelled()) {
-    \booktool_importpptx\pending_file::delete($context, $book->id);
     redirect($returnurl);
 }
 
 // Confirmation step: the upload has already been staged; run it now.
 if (optional_param('confirm', 0, PARAM_BOOL) && confirm_sesskey()) {
-    $file = \booktool_importpptx\pending_file::get($context, $book->id);
+    $pendingid = required_param('pendingid', PARAM_INT);
+    $file = \booktool_importpptx\pending_file::get($context, $pendingid);
     if ($file === null) {
         redirect(
             $returnurl,
@@ -83,7 +90,7 @@ if (optional_param('confirm', 0, PARAM_BOOL) && confirm_sesskey()) {
             \core\output\notification::NOTIFY_ERROR
         );
     }
-    $result = booktool_importpptx_process($file, $book, $context, $cm);
+    $result = booktool_importpptx_process($file, $book, $context, $cm, $pendingid);
     if ($result->queued) {
         redirect(
             $returnurl,
@@ -102,7 +109,8 @@ if (optional_param('confirm', 0, PARAM_BOOL) && confirm_sesskey()) {
 
 // First submission: stage the upload and show a confirmation with the slide count.
 if ($data = $mform->get_data()) {
-    $file = \booktool_importpptx\pending_file::store($data->pptxfile, $context, $book->id);
+    $pendingid = (int) $data->pptxfile;
+    $file = \booktool_importpptx\pending_file::store($pendingid, $context);
     if ($file === null) {
         redirect(
             $PAGE->url,
@@ -115,17 +123,18 @@ if ($data = $mform->get_data()) {
     try {
         $count = \booktool_importpptx\importer::count_slides($file);
     } catch (\moodle_exception $e) {
-        \booktool_importpptx\pending_file::delete($context, $book->id);
+        \booktool_importpptx\pending_file::delete($context, $pendingid);
         redirect($PAGE->url, $e->getMessage(), null, \core\output\notification::NOTIFY_ERROR);
     }
 
-    $continueurl = new moodle_url($PAGE->url, ['id' => $cm->id, 'confirm' => 1]);
+    $continueurl = new moodle_url($PAGE->url, ['id' => $cm->id, 'confirm' => 1, 'pendingid' => $pendingid]);
+    $cancelurl = new moodle_url($PAGE->url, ['id' => $cm->id, 'cancelpending' => $pendingid]);
     echo $OUTPUT->header();
     echo $OUTPUT->heading(get_string('confirmimport', 'booktool_importpptx'));
     echo $OUTPUT->confirm(
         get_string('confirmimportdetail', 'booktool_importpptx', $count),
         $continueurl,
-        $returnurl
+        $cancelurl
     );
     echo $OUTPUT->footer();
     exit;

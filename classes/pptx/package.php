@@ -38,11 +38,20 @@ class package {
     /** @var int Upper bound on slides to guard against abusive uploads. */
     const MAX_SLIDES = 1000;
 
+    /** @var int Maximum uncompressed size, in bytes, of any single part (anti zip-bomb). */
+    const MAX_PART_SIZE = 104857600;
+
+    /** @var int Maximum total uncompressed bytes inflated over the package's lifetime. */
+    const MAX_TOTAL_SIZE = 1073741824;
+
     /** @var string DrawingML main namespace. */
     const NS_A = 'http://schemas.openxmlformats.org/drawingml/2006/main';
 
     /** @var string PresentationML namespace. */
     const NS_P = 'http://schemas.openxmlformats.org/presentationml/2006/main';
+
+    /** @var string Strict OOXML PresentationML namespace (unsupported variant). */
+    const NS_P_STRICT = 'http://purl.oclc.org/ooxml/presentationml/main';
 
     /** @var string Relationships namespace. */
     const NS_R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
@@ -58,6 +67,9 @@ class package {
 
     /** @var int Slide height in EMU, read from presentation.xml. */
     private int $slideheight = self::SLIDE_H_EMU;
+
+    /** @var int Running total of uncompressed bytes inflated from the package. */
+    private int $inflated = 0;
 
     /**
      * Opens the package and validates it is a real PowerPoint file.
@@ -77,7 +89,27 @@ class package {
         ) {
             throw new \moodle_exception('errornopptx', 'booktool_importpptx');
         }
+        $this->reject_strict_ooxml();
         $this->read_dimensions();
+    }
+
+    /**
+     * Rejects Strict Open XML presentations, whose namespaces differ from the
+     * transitional ones this parser understands; importing them silently would
+     * produce empty chapters, so fail with a clear message instead.
+     *
+     * @return void
+     * @throws \moodle_exception If the presentation uses the strict OOXML namespace.
+     */
+    private function reject_strict_ooxml(): void {
+        $doc = $this->get_xml('ppt/presentation.xml');
+        if ($doc === null) {
+            return;
+        }
+        $root = $doc->documentElement;
+        if ($root instanceof \DOMElement && $root->namespaceURI === self::NS_P_STRICT) {
+            throw new \moodle_exception('errorstrictooxml', 'booktool_importpptx');
+        }
     }
 
     /**
@@ -157,8 +189,8 @@ class package {
      * @return \DOMDocument|null The parsed document, or null if missing/invalid.
      */
     public function get_xml(string $path): ?\DOMDocument {
-        $xml = $this->zip->getFromName($path);
-        if ($xml === false || $xml === '') {
+        $xml = $this->read_entry($path);
+        if ($xml === null || $xml === '') {
             return null;
         }
         // XXE guard: forbid network access, block external entity resolution, and
@@ -211,8 +243,36 @@ class package {
      * @return string|null The bytes, or null if the part is missing.
      */
     public function get_bytes(string $path): ?string {
+        return $this->read_entry($path);
+    }
+
+    /**
+     * Reads a package entry, enforcing per-part and aggregate uncompressed-size
+     * caps before inflating so a compressed "zip bomb" cannot exhaust memory.
+     *
+     * @param string $path Zip path of the part.
+     * @return string|null The bytes, or null if the part is missing.
+     * @throws \moodle_exception If the part or the running total exceeds the caps.
+     */
+    private function read_entry(string $path): ?string {
+        $stat = $this->zip->statName($path);
+        if ($stat === false) {
+            return null;
+        }
+        $declared = (int) ($stat['size'] ?? 0);
+        if ($declared > self::MAX_PART_SIZE || $this->inflated + $declared > self::MAX_TOTAL_SIZE) {
+            throw new \moodle_exception('errortoolarge', 'booktool_importpptx');
+        }
         $data = $this->zip->getFromName($path);
-        return $data === false ? null : $data;
+        if ($data === false) {
+            return null;
+        }
+        // Guard again against a header understating the real inflated size.
+        $this->inflated += strlen($data);
+        if (strlen($data) > self::MAX_PART_SIZE || $this->inflated > self::MAX_TOTAL_SIZE) {
+            throw new \moodle_exception('errortoolarge', 'booktool_importpptx');
+        }
+        return $data;
     }
 
     /**

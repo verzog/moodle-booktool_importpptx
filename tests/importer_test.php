@@ -220,6 +220,31 @@ final class importer_test extends \advanced_testcase {
     }
 
     /**
+     * A Strict Open XML presentation is rejected rather than imported empty.
+     */
+    public function test_rejects_strict_ooxml(): void {
+        $this->resetAfterTest();
+        $dir = make_request_directory();
+        $path = $dir . '/strict.pptx';
+        $strictns = 'http://purl.oclc.org/ooxml/presentationml/main';
+
+        $zip = new \ZipArchive();
+        $zip->open($path, \ZipArchive::CREATE);
+        $zip->addFromString(
+            '[Content_Types].xml',
+            '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>'
+        );
+        $zip->addFromString(
+            'ppt/presentation.xml',
+            '<?xml version="1.0"?><p:presentation xmlns:p="' . $strictns . '"><p:sldIdLst/></p:presentation>'
+        );
+        $zip->close();
+
+        $this->expectException(\moodle_exception::class);
+        new package($path);
+    }
+
+    /**
      * Builds a stored_file from the fixture in the plugin's import area.
      *
      * @param int|null $bookid Item id to store under (defaults to a constant).

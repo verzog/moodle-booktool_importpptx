@@ -48,9 +48,10 @@ class import_task extends \core\task\adhoc_task {
         global $DB;
 
         $data = $this->get_custom_data();
-        if (empty($data->cmid)) {
+        if (empty($data->cmid) || empty($data->fileitemid)) {
             return;
         }
+        $itemid = (int) $data->fileitemid;
 
         $cm = get_coursemodule_from_id('book', $data->cmid, 0, false, IGNORE_MISSING);
         if (!$cm) {
@@ -62,18 +63,26 @@ class import_task extends \core\task\adhoc_task {
         }
         $context = \context_module::instance($cm->id);
 
-        $file = \booktool_importpptx\pending_file::get($context, $book->id);
+        // Honour the kill-switch even for already-queued imports: if an administrator
+        // disabled the importer after queuing, abort and clean up without importing.
+        $enabled = get_config('booktool_importpptx', 'enabled');
+        if ($enabled !== false && empty($enabled)) {
+            mtrace("booktool_importpptx: importer disabled, skipping queued import for book {$book->id}.");
+            \booktool_importpptx\pending_file::delete($context, $itemid);
+            return;
+        }
+
+        $file = \booktool_importpptx\pending_file::get($context, $itemid);
         if ($file === null) {
             return;
         }
 
-        try {
-            $importer = new importer($book, $context);
-            $count = $importer->import($file);
-            mtrace("booktool_importpptx: imported {$count} chapters into book {$book->id}.");
-        } finally {
-            \booktool_importpptx\pending_file::delete($context, $book->id);
-        }
+        // Do not delete the staged upload in a finally: if the import throws on a
+        // transient error, Moodle retries the adhoc task and needs the input intact.
+        $importer = new importer($book, $context);
+        $count = $importer->import($file);
+        mtrace("booktool_importpptx: imported {$count} chapters into book {$book->id}.");
+        \booktool_importpptx\pending_file::delete($context, $itemid);
     }
 
     /**

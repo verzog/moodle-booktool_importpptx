@@ -160,6 +160,9 @@ class importer {
         global $DB;
 
         $now = time();
+        // The book_chapters.title column holds 255 characters; a longer placeholder
+        // title would fail the insert on strict databases, so bound it here.
+        $title = \core_text::substr($title, 0, 255);
         $chapter = (object) [
             'bookid' => $this->book->id,
             'pagenum' => $pagenum,

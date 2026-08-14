@@ -33,9 +33,16 @@
  * @param stdClass $book The target book record.
  * @param context_module $context The book's module context.
  * @param stdClass|cm_info $cm The book's course module.
+ * @param int $pendingid The staged upload's item id (for cleanup and the async task).
  * @return stdClass Object with properties queued (bool) and count (int slides/chapters).
  */
-function booktool_importpptx_process(stored_file $file, stdClass $book, context_module $context, $cm): stdClass {
+function booktool_importpptx_process(
+    stored_file $file,
+    stdClass $book,
+    context_module $context,
+    $cm,
+    int $pendingid
+): stdClass {
     global $USER;
 
     // Fall back to the shipped default when the setting has not been stored yet.
@@ -45,7 +52,7 @@ function booktool_importpptx_process(stored_file $file, stdClass $book, context_
 
     if ($count > $threshold) {
         $task = new \booktool_importpptx\task\import_task();
-        $task->set_custom_data(['bookid' => $book->id, 'cmid' => $cm->id]);
+        $task->set_custom_data(['bookid' => $book->id, 'cmid' => $cm->id, 'fileitemid' => $pendingid]);
         $task->set_userid($USER->id);
         \core\task\manager::queue_adhoc_task($task);
         return (object) ['queued' => true, 'count' => $count];
@@ -53,6 +60,6 @@ function booktool_importpptx_process(stored_file $file, stdClass $book, context_
 
     $importer = new \booktool_importpptx\importer($book, $context);
     $created = $importer->import($file);
-    \booktool_importpptx\pending_file::delete($context, $book->id);
+    \booktool_importpptx\pending_file::delete($context, $pendingid);
     return (object) ['queued' => false, 'count' => $created];
 }

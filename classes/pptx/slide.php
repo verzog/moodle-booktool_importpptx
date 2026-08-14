@@ -109,19 +109,20 @@ class slide {
      * @param \DOMElement $el The container element (spTree or grpSp).
      * @param \DOMXPath $xpath Namespaced XPath over the slide document.
      * @param block[] $out Accumulator, passed by reference.
+     * @param array|null $tf Coordinate transform inherited from enclosing groups.
      * @return void
      */
-    private function collect(\DOMElement $el, \DOMXPath $xpath, array &$out): void {
+    private function collect(\DOMElement $el, \DOMXPath $xpath, array &$out, ?array $tf = null): void {
         foreach ($el->childNodes as $ch) {
             if (!$ch instanceof \DOMElement || $ch->namespaceURI !== package::NS_P) {
                 continue;
             }
             switch ($ch->localName) {
                 case 'pic':
-                    $this->collect_picture($ch, $xpath, $out);
+                    $this->collect_picture($ch, $xpath, $out, $tf);
                     break;
                 case 'sp':
-                    $this->collect_shape($ch, $xpath, $out);
+                    $this->collect_shape($ch, $xpath, $out, $tf);
                     break;
                 case 'graphicFrame':
                     $html = $this->smartart_html($ch, $xpath);
@@ -129,15 +130,59 @@ class slide {
                         $html = $this->table_html($ch, $xpath);
                     }
                     if ($html !== null) {
-                        [$y, $x] = $this->offset($ch, $xpath);
+                        [$y, $x] = $this->offset($ch, $xpath, $tf);
                         $out[] = new block(block::TYPE_HTML, $y, $x, $html);
                     }
                     break;
                 case 'grpSp':
-                    $this->collect($ch, $xpath, $out);
+                    // Children are positioned in the group's coordinate space; carry
+                    // the composed transform down so they sort correctly on the slide.
+                    $this->collect($ch, $xpath, $out, $this->group_transform($ch, $xpath, $tf));
                     break;
             }
         }
+    }
+
+    /**
+     * Composes a group's coordinate transform with the one inherited from its
+     * ancestors, mapping child offsets into slide coordinates.
+     *
+     * @param \DOMElement $grpsp The p:grpSp element.
+     * @param \DOMXPath $xpath Namespaced XPath.
+     * @param array|null $parenttf The transform of the enclosing group, or null.
+     * @return array|null The composed transform, or the parent's if this group has none.
+     */
+    private function group_transform(\DOMElement $grpsp, \DOMXPath $xpath, ?array $parenttf): ?array {
+        $xfrm = $xpath->query('./p:grpSpPr/a:xfrm', $grpsp)->item(0);
+        if (!$xfrm instanceof \DOMElement) {
+            return $parenttf;
+        }
+        $off = $xpath->query('a:off', $xfrm)->item(0);
+        $ext = $xpath->query('a:ext', $xfrm)->item(0);
+        $choff = $xpath->query('a:chOff', $xfrm)->item(0);
+        $chext = $xpath->query('a:chExt', $xfrm)->item(0);
+        if (
+            !$off instanceof \DOMElement || !$ext instanceof \DOMElement
+                || !$choff instanceof \DOMElement || !$chext instanceof \DOMElement
+        ) {
+            return $parenttf;
+        }
+        $chextcx = (int) $chext->getAttribute('cx');
+        $chextcy = (int) $chext->getAttribute('cy');
+        $sx = $chextcx > 0 ? (int) $ext->getAttribute('cx') / $chextcx : 1.0;
+        $sy = $chextcy > 0 ? (int) $ext->getAttribute('cy') / $chextcy : 1.0;
+        $localox = (int) $off->getAttribute('x') - (int) $choff->getAttribute('x') * $sx;
+        $localoy = (int) $off->getAttribute('y') - (int) $choff->getAttribute('y') * $sy;
+
+        if ($parenttf === null) {
+            return ['ox' => $localox, 'oy' => $localoy, 'sx' => $sx, 'sy' => $sy];
+        }
+        return [
+            'ox' => $parenttf['ox'] + $localox * $parenttf['sx'],
+            'oy' => $parenttf['oy'] + $localoy * $parenttf['sy'],
+            'sx' => $sx * $parenttf['sx'],
+            'sy' => $sy * $parenttf['sy'],
+        ];
     }
 
     /**
@@ -146,9 +191,10 @@ class slide {
      * @param \DOMElement $pic The p:pic element.
      * @param \DOMXPath $xpath Namespaced XPath.
      * @param block[] $out Accumulator, passed by reference.
+     * @param array|null $tf Coordinate transform inherited from enclosing groups.
      * @return void
      */
-    private function collect_picture(\DOMElement $pic, \DOMXPath $xpath, array &$out): void {
+    private function collect_picture(\DOMElement $pic, \DOMXPath $xpath, array &$out, ?array $tf = null): void {
         $blip = $xpath->query('.//a:blip', $pic)->item(0);
         if (!$blip instanceof \DOMElement) {
             return;
@@ -159,7 +205,7 @@ class slide {
         if ($rid === '' || !isset($this->rels[$rid])) {
             return;
         }
-        [$y, $x] = $this->offset($pic, $xpath);
+        [$y, $x] = $this->offset($pic, $xpath, $tf);
         $out[] = new block(block::TYPE_IMAGE, $y, $x, $this->rels[$rid]);
     }
 
@@ -169,10 +215,11 @@ class slide {
      * @param \DOMElement $sp The p:sp element.
      * @param \DOMXPath $xpath Namespaced XPath.
      * @param block[] $out Accumulator, passed by reference.
+     * @param array|null $tf Coordinate transform inherited from enclosing groups.
      * @return void
      */
-    private function collect_shape(\DOMElement $sp, \DOMXPath $xpath, array &$out): void {
-        [$y, $x] = $this->offset($sp, $xpath);
+    private function collect_shape(\DOMElement $sp, \DOMXPath $xpath, array &$out, ?array $tf = null): void {
+        [$y, $x] = $this->offset($sp, $xpath, $tf);
         if ($this->is_title($sp, $xpath)) {
             $text = $this->raw_text($sp, $xpath);
             if ($text !== '') {
@@ -196,12 +243,19 @@ class slide {
      *
      * @param \DOMElement $el The shape element.
      * @param \DOMXPath $xpath Namespaced XPath.
+     * @param array|null $tf Coordinate transform inherited from enclosing groups.
      * @return array{0:int,1:int} The [y, x] pair.
      */
-    private function offset(\DOMElement $el, \DOMXPath $xpath): array {
+    private function offset(\DOMElement $el, \DOMXPath $xpath, ?array $tf = null): array {
         $off = $xpath->query('.//a:off', $el)->item(0);
         if ($off instanceof \DOMElement && $off->getAttribute('y') !== '') {
-            return [(int) $off->getAttribute('y'), (int) $off->getAttribute('x')];
+            $y = (int) $off->getAttribute('y');
+            $x = (int) $off->getAttribute('x');
+            if ($tf !== null) {
+                $y = (int) round($tf['oy'] + $y * $tf['sy']);
+                $x = (int) round($tf['ox'] + $x * $tf['sx']);
+            }
+            return [$y, $x];
         }
         return [self::NO_OFFSET, self::NO_OFFSET];
     }
@@ -346,13 +400,19 @@ class slide {
         foreach ($xpath->query('a:tr', $tbl) as $tr) {
             $cells = [];
             foreach ($xpath->query('a:tc', $tr) as $tc) {
-                $parts = [];
-                foreach ($xpath->query('.//a:t', $tc) as $t) {
-                    if ($t->textContent !== '') {
-                        $parts[] = s($t->textContent);
+                // Concatenate runs within a paragraph verbatim (mixed formatting
+                // must not introduce spaces); separate distinct paragraphs by a space.
+                $paras = [];
+                foreach ($xpath->query('.//a:p', $tc) as $p) {
+                    $runs = '';
+                    foreach ($xpath->query('.//a:t', $p) as $t) {
+                        $runs .= $t->textContent;
+                    }
+                    if (trim($runs) !== '') {
+                        $paras[] = s($runs);
                     }
                 }
-                $cells[] = implode(' ', $parts);
+                $cells[] = implode(' ', $paras);
             }
             if (!empty($cells)) {
                 $rows[] = $cells;
@@ -386,6 +446,9 @@ class slide {
      * @return \stdClass|null {colour:?string, panelright:?int} for a divider, else null.
      */
     private function detect_section(\DOMDocument $doc, \DOMXPath $xpath): ?\stdClass {
+        // A side panel occupies a bounded fraction of the slide width; a rectangle
+        // wider than this is a full-slide background, not a divider plate.
+        $maxpanelwidth = (int) ($this->package->slide_width() / 2);
         foreach ($xpath->query('/p:sld/p:cSld/p:spTree/p:sp') as $sp) {
             $fill = $xpath->query('.//p:spPr/a:solidFill/a:srgbClr', $sp)->item(0);
             $off = $xpath->query('.//p:spPr/a:xfrm/a:off', $sp)->item(0);
@@ -396,7 +459,7 @@ class slide {
             $x = (int) $off->getAttribute('x');
             $cx = (int) $ext->getAttribute('cx');
             $cy = (int) $ext->getAttribute('cy');
-            if ($x <= self::PANEL_MAX_X_EMU && $cy >= self::PANEL_MIN_H_EMU) {
+            if ($x <= self::PANEL_MAX_X_EMU && $cy >= self::PANEL_MIN_H_EMU && $cx <= $maxpanelwidth) {
                 $val = strtolower($fill->getAttribute('val'));
                 $colour = preg_match('/^[0-9a-f]{6}$/', $val) ? '#' . $val : null;
                 return (object) ['colour' => $colour, 'panelright' => $x + $cx];

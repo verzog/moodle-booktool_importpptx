@@ -287,20 +287,25 @@ class html_builder {
     }
 
     /**
-     * Promotes the first short single-line text block to a chapter title.
+     * Promotes a short leading line to the chapter title.
+     *
+     * Only the first block in reading order is considered: if the slide's leading
+     * content is not a short single-line text box, no title is promoted, so an
+     * image caption or footer further down cannot be pulled out of the body.
      *
      * @param block[] $blocks Blocks in reading order.
      * @return array{0:?string,1:block[]} The [title, remaining-blocks] pair.
      */
     private function promote_title(array $blocks): array {
-        foreach ($blocks as $i => $b) {
-            if ($b->type !== block::TYPE_TEXT || count($b->content) !== 1) {
-                continue;
-            }
-            $plain = self::plain_text($b->content[0]);
+        if (empty($blocks)) {
+            return [null, $blocks];
+        }
+        $first = $blocks[0];
+        if ($first->type === block::TYPE_TEXT && count($first->content) === 1) {
+            $plain = self::plain_text($first->content[0]);
             if ($plain !== '' && \core_text::strlen($plain) <= self::TITLE_FALLBACK_MAX_CHARS) {
-                unset($blocks[$i]);
-                return [$plain, array_values($blocks)];
+                array_shift($blocks);
+                return [$plain, $blocks];
             }
         }
         return [null, $blocks];
