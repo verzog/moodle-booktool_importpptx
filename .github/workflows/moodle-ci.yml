@@ -9,6 +9,10 @@ jobs:
   test:
     runs-on: ubuntu-22.04
 
+    # Australian timezone so date/time tests respect AEST/AWST offsets (see CLAUDE §1).
+    env:
+      TZ: Australia/Sydney
+
     services:
       postgres:
         image: postgres:14

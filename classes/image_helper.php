@@ -40,7 +40,7 @@ class image_helper {
      *
      * @param string $bytes The source image bytes (e.g. a rendered PNG page).
      * @param int $maxdim Maximum longest-edge size in px (0 keeps the source size).
-     * @return array{0:string,1:string} A [extension, bytes] pair; extension has no dot.
+     * @return array A [extension, bytes] pair; extension has no dot.
      */
     public static function to_web(string $bytes, int $maxdim): array {
         if (!function_exists('imagecreatefromstring')) {

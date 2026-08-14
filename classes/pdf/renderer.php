@@ -77,7 +77,7 @@ class renderer {
      *
      * @param \stored_file $pdf The uploaded PDF.
      * @param int $maxdim Maximum image dimension in px (0 keeps the rendered size).
-     * @return \Generator<array{0:int,1:string,2:string}> Yields [pagenumber, filename, bytes].
+     * @return \Generator Yields [pagenumber, filename, bytes] arrays.
      * @throws \moodle_exception If rendering fails or the page count exceeds the cap.
      */
     public function render_pages(\stored_file $pdf, int $maxdim): \Generator {
@@ -157,7 +157,7 @@ class renderer {
      * Runs a command with arguments passed as an array (no shell, so no injection).
      *
      * @param string[] $command The command and its arguments.
-     * @return array{started:bool,code:int,out:string,err:string} The run result.
+     * @return array The run result with started, code, out and err keys.
      */
     private static function run(array $command): array {
         $descriptors = [1 => ['pipe', 'w'], 2 => ['pipe', 'w']];

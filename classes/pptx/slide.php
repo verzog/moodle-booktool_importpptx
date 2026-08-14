@@ -47,7 +47,7 @@ class slide {
     /** @var string Zip path of this slide part. */
     private string $path;
 
-    /** @var array<string,string> Relationship id => resolved zip path for this slide. */
+    /** @var array Relationship id => resolved zip path for this slide. */
     private array $rels;
 
     /**
@@ -244,7 +244,7 @@ class slide {
      * @param \DOMElement $el The shape element.
      * @param \DOMXPath $xpath Namespaced XPath.
      * @param array|null $tf Coordinate transform inherited from enclosing groups.
-     * @return array{0:int,1:int} The [y, x] pair.
+     * @return array The [y, x] pair.
      */
     private function offset(\DOMElement $el, \DOMXPath $xpath, ?array $tf = null): array {
         $off = $xpath->query('.//a:off', $el)->item(0);
