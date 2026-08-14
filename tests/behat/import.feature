@@ -12,6 +12,7 @@ Feature: Import a PowerPoint presentation into a book
       | activity | name      | intro           | course | idnumber |
       | book     | Test book | Book for import | C1     | book1    |
 
+  @javascript
   Scenario: Importing a deck creates a chapter per slide
     When I am on the "book1" "booktool_importpptx > Import" page logged in as "admin"
     And I upload "mod/book/tool/importpptx/tests/fixtures/sample.pptx" file to "PowerPoint presentation" filemanager
