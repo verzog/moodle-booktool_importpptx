@@ -29,7 +29,6 @@ namespace booktool_importpptx\pptx;
  * relationships, and media, using only PHP's bundled ZipArchive and DOMDocument.
  */
 class package {
-
     /** @var int Default reference slide width in EMU (16:9). */
     const SLIDE_W_EMU = 12192000;
 
@@ -72,8 +71,10 @@ class package {
             throw new \moodle_exception('errornopptx', 'booktool_importpptx');
         }
         // A valid presentation must carry these parts.
-        if ($this->zip->locateName('[Content_Types].xml') === false
-                || $this->zip->locateName('ppt/presentation.xml') === false) {
+        if (
+            $this->zip->locateName('[Content_Types].xml') === false
+                || $this->zip->locateName('ppt/presentation.xml') === false
+        ) {
             throw new \moodle_exception('errornopptx', 'booktool_importpptx');
         }
         $this->read_dimensions();

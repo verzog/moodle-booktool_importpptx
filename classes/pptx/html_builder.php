@@ -32,7 +32,6 @@ namespace booktool_importpptx\pptx;
  * output inherits the site theme; only the section plate carries bespoke CSS.
  */
 class html_builder {
-
     /** @var int A preceding text block this short (stripped) can be an image caption. */
     const CAPTION_MAX_CHARS = 12;
 

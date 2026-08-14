@@ -30,7 +30,6 @@ namespace booktool_importpptx;
  * transient draft file area. One pending upload per book (keyed by book id).
  */
 class pending_file {
-
     /** @var string The file component. */
     const COMPONENT = 'booktool_importpptx';
 

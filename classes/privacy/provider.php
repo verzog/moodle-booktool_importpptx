@@ -29,7 +29,6 @@ namespace booktool_importpptx\privacy;
  * chapters and files it creates belong to mod_book.
  */
 class provider implements \core_privacy\local\metadata\null_provider {
-
     /**
      * Returns the language string explaining why this plugin stores no data.
      *

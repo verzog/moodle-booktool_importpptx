@@ -30,7 +30,6 @@ use booktool_importpptx\importer;
  * Runs {@see importer::import()} for presentations above the async threshold.
  */
 class import_task extends \core\task\adhoc_task {
-
     /**
      * Returns the human-readable task name.
      *

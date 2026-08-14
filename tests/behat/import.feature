@@ -12,9 +12,15 @@ Feature: Import a PowerPoint presentation into a book
       | activity | name      | intro           | course | idnumber |
       | book     | Test book | Book for import | C1     | book1    |
     And I log in as "admin"
+    # A new book has no chapters and redirects to the add-chapter form; add one so
+    # the book's view page (with its actions menu) is shown.
+    And I am on the "Test book" "book activity" page
+    And I set the following fields to these values:
+      | Chapter title | First chapter       |
+      | Content       | Placeholder content |
+    And I press "Save changes"
 
   Scenario: Importing a deck creates a chapter per slide
-    Given I am on the "Test book" "book activity" page
     When I navigate to "Import PowerPoint" in current page administration
     And I upload "mod/book/tool/importpptx/tests/fixtures/sample.pptx" file to "PowerPoint presentation" filemanager
     And I press "Import"
@@ -28,4 +34,4 @@ Feature: Import a PowerPoint presentation into a book
     Given the following config values are set as admin:
       | enabled | 0 | booktool_importpptx |
     And I am on the "Test book" "book activity" page
-    Then "Import PowerPoint" "link" should not exist in current page administration
+    Then "Import PowerPoint" "link" should not exist

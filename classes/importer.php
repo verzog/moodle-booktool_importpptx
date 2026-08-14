@@ -32,7 +32,6 @@ use booktool_importpptx\pptx\html_builder;
  * Reads a .pptx and creates one book chapter per slide, in slide order.
  */
 class importer {
-
     /** @var \stdClass The target book record. */
     private \stdClass $book;
 
@@ -89,7 +88,9 @@ class importer {
             $slidepaths = $package->get_slide_paths();
 
             $pagenum = (int) $DB->get_field_sql(
-                'SELECT MAX(pagenum) FROM {book_chapters} WHERE bookid = ?', [$this->book->id]);
+                'SELECT MAX(pagenum) FROM {book_chapters} WHERE bookid = ?',
+                [$this->book->id]
+            );
             $insection = false;
             $created = 0;
 
@@ -110,8 +111,16 @@ class importer {
                 }
 
                 $pagenum++;
-                $this->write_chapter($package, $pptx->get_filename(), $title, $chapter->html,
-                    $chapter->images, $pagenum, $subchapter, $maxdim);
+                $this->write_chapter(
+                    $package,
+                    $pptx->get_filename(),
+                    $title,
+                    $chapter->html,
+                    $chapter->images,
+                    $pagenum,
+                    $subchapter,
+                    $maxdim
+                );
                 $created++;
             }
 
@@ -132,14 +141,22 @@ class importer {
      * @param string $importsrc The uploaded file name, recorded on the chapter.
      * @param string $title The chapter title (plain text).
      * @param string $html The chapter body HTML (with @@PLUGINFILE@@ references).
-     * @param array<string,string> $images Map of filename => source media path.
+     * @param array $images Map of chapter filename to source media path in the package.
      * @param int $pagenum The chapter's page number within the book.
      * @param int $subchapter 1 if this is a subchapter, otherwise 0.
      * @param int $maxdim Maximum image dimension in px (0 keeps originals).
      * @return void
      */
-    private function write_chapter(package $package, string $importsrc, string $title, string $html,
-            array $images, int $pagenum, int $subchapter, int $maxdim): void {
+    private function write_chapter(
+        package $package,
+        string $importsrc,
+        string $title,
+        string $html,
+        array $images,
+        int $pagenum,
+        int $subchapter,
+        int $maxdim
+    ): void {
         global $DB;
 
         $now = time();

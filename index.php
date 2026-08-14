@@ -46,14 +46,22 @@ $PAGE->navbar->add(get_string('importpptx', 'booktool_importpptx'));
 
 // Kill-switch: refuse when the importer is disabled site-wide.
 if (!get_config('booktool_importpptx', 'enabled')) {
-    redirect($returnurl, get_string('disabled', 'booktool_importpptx'), null,
-        \core\output\notification::NOTIFY_ERROR);
+    redirect(
+        $returnurl,
+        get_string('disabled', 'booktool_importpptx'),
+        null,
+        \core\output\notification::NOTIFY_ERROR
+    );
 }
 
 // Do not allow a second import while one is already queued for this book.
 if (\booktool_importpptx\task\import_task::is_queued($book->id)) {
-    redirect($returnurl, get_string('taskinprogress', 'booktool_importpptx'), null,
-        \core\output\notification::NOTIFY_WARNING);
+    redirect(
+        $returnurl,
+        get_string('taskinprogress', 'booktool_importpptx'),
+        null,
+        \core\output\notification::NOTIFY_WARNING
+    );
 }
 
 $mform = new \booktool_importpptx\form\import_form(null, ['id' => $cm->id]);
@@ -66,24 +74,40 @@ if ($mform->is_cancelled()) {
 if (optional_param('confirm', 0, PARAM_BOOL) && confirm_sesskey()) {
     $file = \booktool_importpptx\pending_file::get($context, $book->id);
     if ($file === null) {
-        redirect($returnurl, get_string('errornoslides', 'booktool_importpptx'), null,
-            \core\output\notification::NOTIFY_ERROR);
+        redirect(
+            $returnurl,
+            get_string('errornoslides', 'booktool_importpptx'),
+            null,
+            \core\output\notification::NOTIFY_ERROR
+        );
     }
     $result = booktool_importpptx_process($file, $book, $context, $cm);
     if ($result->queued) {
-        redirect($returnurl, get_string('asyncqueued', 'booktool_importpptx', $result->count), null,
-            \core\output\notification::NOTIFY_INFO);
+        redirect(
+            $returnurl,
+            get_string('asyncqueued', 'booktool_importpptx', $result->count),
+            null,
+            \core\output\notification::NOTIFY_INFO
+        );
     }
-    redirect($returnurl, get_string('importresult', 'booktool_importpptx', $result->count), null,
-        \core\output\notification::NOTIFY_SUCCESS);
+    redirect(
+        $returnurl,
+        get_string('importresult', 'booktool_importpptx', $result->count),
+        null,
+        \core\output\notification::NOTIFY_SUCCESS
+    );
 }
 
 // First submission: stage the upload and show a confirmation with the slide count.
 if ($data = $mform->get_data()) {
     $file = \booktool_importpptx\pending_file::store($data->pptxfile, $context, $book->id);
     if ($file === null) {
-        redirect($PAGE->url, get_string('errornopptx', 'booktool_importpptx'), null,
-            \core\output\notification::NOTIFY_ERROR);
+        redirect(
+            $PAGE->url,
+            get_string('errornopptx', 'booktool_importpptx'),
+            null,
+            \core\output\notification::NOTIFY_ERROR
+        );
     }
 
     try {
@@ -96,8 +120,11 @@ if ($data = $mform->get_data()) {
     $continueurl = new moodle_url($PAGE->url, ['id' => $cm->id, 'confirm' => 1]);
     echo $OUTPUT->header();
     echo $OUTPUT->heading(get_string('confirmimport', 'booktool_importpptx'));
-    echo $OUTPUT->confirm(get_string('confirmimportdetail', 'booktool_importpptx', $count),
-        $continueurl, $returnurl);
+    echo $OUTPUT->confirm(
+        get_string('confirmimportdetail', 'booktool_importpptx', $count),
+        $continueurl,
+        $returnurl
+    );
     echo $OUTPUT->footer();
     exit;
 }

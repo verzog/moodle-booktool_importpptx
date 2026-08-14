@@ -32,8 +32,10 @@
  * @param navigation_node $booknode The book branch of the settings navigation.
  * @return void
  */
-function booktool_importpptx_extend_settings_navigation(settings_navigation $settingsnav,
-        navigation_node $booknode) {
+function booktool_importpptx_extend_settings_navigation(
+    settings_navigation $settingsnav,
+    navigation_node $booknode
+) {
     global $PAGE;
 
     // Only show the action while we are inside a book activity with a course module.
@@ -51,6 +53,12 @@ function booktool_importpptx_extend_settings_navigation(settings_navigation $set
     }
 
     $url = new moodle_url('/mod/book/tool/importpptx/index.php', ['id' => $PAGE->cm->id]);
-    $booknode->add(get_string('importpptx', 'booktool_importpptx'), $url,
-        navigation_node::TYPE_SETTING, null, 'importpptx', new pix_icon('i/import', ''));
+    $booknode->add(
+        get_string('importpptx', 'booktool_importpptx'),
+        $url,
+        navigation_node::TYPE_SETTING,
+        null,
+        'importpptx',
+        new pix_icon('i/import', '')
+    );
 }

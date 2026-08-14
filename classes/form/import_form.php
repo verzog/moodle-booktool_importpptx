@@ -28,7 +28,6 @@ namespace booktool_importpptx\form;
  * Presents the .pptx file picker and the Import button.
  */
 class import_form extends \moodleform {
-
     /**
      * Defines the form elements.
      *
@@ -37,8 +36,13 @@ class import_form extends \moodleform {
     protected function definition() {
         $mform = $this->_form;
 
-        $mform->addElement('filepicker', 'pptxfile', get_string('file', 'booktool_importpptx'),
-            null, ['accepted_types' => ['.pptx'], 'maxfiles' => 1]);
+        $mform->addElement(
+            'filepicker',
+            'pptxfile',
+            get_string('file', 'booktool_importpptx'),
+            null,
+            ['accepted_types' => ['.pptx'], 'maxfiles' => 1]
+        );
         $mform->addRule('pptxfile', null, 'required', null, 'client');
         $mform->addHelpButton('pptxfile', 'file', 'booktool_importpptx');
 

@@ -39,7 +39,6 @@ use booktool_importpptx\pptx\html_builder;
  * @covers \booktool_importpptx\importer
  */
 final class importer_test extends \advanced_testcase {
-
     /**
      * Returns the absolute path to the fixture deck.
      *
@@ -133,8 +132,10 @@ final class importer_test extends \advanced_testcase {
      */
     public function test_smartart_and_table(): void {
         $chapters = $this->build_all();
-        $this->assertStringContainsString('<ul><li>Step A</li><li>Step B</li><li>Step C</li></ul>',
-            $chapters[3]->html);
+        $this->assertStringContainsString(
+            '<ul><li>Step A</li><li>Step B</li><li>Step C</li></ul>',
+            $chapters[3]->html
+        );
         $this->assertStringContainsString('<table', $chapters[4]->html);
         $this->assertStringContainsString('<th>Day</th>', $chapters[4]->html);
         $this->assertStringContainsString('<td>Mon</td>', $chapters[4]->html);
@@ -195,8 +196,14 @@ final class importer_test extends \advanced_testcase {
         // The image on slide 2 was saved into mod_book's chapter area and referenced.
         $this->assertStringContainsString('@@PLUGINFILE@@/image1.png', $chapters[1]->content);
         $fs = get_file_storage();
-        $this->assertTrue($fs->file_exists($context->id, 'mod_book', 'chapter',
-            $chapters[1]->id, '/', 'image1.png'));
+        $this->assertTrue($fs->file_exists(
+            $context->id,
+            'mod_book',
+            'chapter',
+            $chapters[1]->id,
+            '/',
+            'image1.png'
+        ));
     }
 
     /**

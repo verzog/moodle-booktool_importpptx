@@ -29,7 +29,6 @@ namespace booktool_importpptx\pptx;
  * the title placeholder and any section-divider panel along the way.
  */
 class slide {
-
     /** @var int A section panel must begin within this many EMU of the left edge. */
     const PANEL_MAX_X_EMU = 200000;
 

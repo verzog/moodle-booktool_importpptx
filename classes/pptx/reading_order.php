@@ -29,7 +29,6 @@ namespace booktool_importpptx\pptx;
  * left-to-right within each row.
  */
 class reading_order {
-
     /** @var int Row-grouping tolerance in EMU (~0.5 inch). */
     const ROW_BAND_EMU = 457200;
 

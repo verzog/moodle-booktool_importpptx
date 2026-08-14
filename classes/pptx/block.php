@@ -31,7 +31,6 @@ namespace booktool_importpptx\pptx;
  * into reading order regardless of the order they appear in the XML.
  */
 class block {
-
     /** @var string A title placeholder. Content is a plain-text string. */
     const TYPE_TITLE = 'title';
 
