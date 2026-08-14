@@ -1,0 +1,47 @@
+/* Styles for booktool_importpptx generated chapters.
+ *
+ * Kept intentionally small: layout relies on Moodle's bundled Bootstrap grid
+ * classes. The only bespoke rules are for the section-divider hero plate and a
+ * light caption treatment for image grids.
+ */
+
+.booktool-importpptx-section {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: stretch;
+    margin-bottom: 1rem;
+}
+
+.booktool-importpptx-plate {
+    flex: 0 0 auto;
+    min-width: 8rem;
+    max-width: 14rem;
+    padding: 1.5rem 1rem;
+    color: #fff;
+    border-radius: 0.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.booktool-importpptx-lede {
+    flex: 1 1 16rem;
+    min-width: 12rem;
+}
+
+.booktool-importpptx-grid .booktool-importpptx-cap {
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+    text-align: center;
+}
+
+.booktool-importpptx-grid img {
+    max-width: 100%;
+    height: auto;
+}
