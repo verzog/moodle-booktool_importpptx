@@ -13,6 +13,11 @@ Feature: Import a PowerPoint presentation into a book
       | book     | Test book | Book for import | C1     | book1    |
 
   @javascript
+  Scenario: The import action is available from the book navigation
+    When I am on the "Test book" "book activity" page logged in as "admin"
+    Then "Import PowerPoint" "link" should exist
+
+  @javascript
   Scenario: Importing a deck creates a chapter per slide
     When I am on the "book1" "booktool_importpptx > Import" page logged in as "admin"
     And I upload "mod/book/tool/importpptx/tests/fixtures/sample.pptx" file to "PowerPoint or PDF file" filemanager
