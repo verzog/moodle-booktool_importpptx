@@ -38,7 +38,9 @@
 function booktool_importpptx_process(stored_file $file, stdClass $book, context_module $context, $cm): stdClass {
     global $USER;
 
-    $threshold = (int) get_config('booktool_importpptx', 'asyncthreshold');
+    // Fall back to the shipped default when the setting has not been stored yet.
+    $threshold = get_config('booktool_importpptx', 'asyncthreshold');
+    $threshold = ($threshold === false || $threshold === '') ? 30 : (int) $threshold;
     $count = \booktool_importpptx\importer::count_slides($file);
 
     if ($count > $threshold) {

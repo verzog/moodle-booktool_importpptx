@@ -44,8 +44,10 @@ $PAGE->set_heading($course->fullname);
 $PAGE->set_activity_record($book);
 $PAGE->navbar->add(get_string('importpptx', 'booktool_importpptx'));
 
-// Kill-switch: refuse when the importer is disabled site-wide.
-if (!get_config('booktool_importpptx', 'enabled')) {
+// Kill-switch: refuse only when an administrator has explicitly disabled the
+// importer; an unset value means the default (enabled) applies.
+$enabled = get_config('booktool_importpptx', 'enabled');
+if ($enabled !== false && empty($enabled)) {
     redirect(
         $returnurl,
         get_string('disabled', 'booktool_importpptx'),
