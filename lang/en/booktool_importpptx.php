@@ -24,17 +24,22 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$string['asyncqueued'] = 'This presentation has {$a} slides, so it is being imported in the background. The chapters will appear in this book shortly.';
+$string['asyncqueued'] = 'This upload will create {$a} chapters, so it is being imported in the background. The chapters will appear in this book shortly.';
 $string['confirmimport'] = 'Import PowerPoint';
-$string['confirmimportdetail'] = 'Create {$a} chapters in this book from the uploaded presentation? Existing chapters will be kept and the new chapters added after them.';
+$string['confirmimportdetail'] = 'Create {$a} chapters in this book from the uploaded file? Existing chapters will be kept and the new chapters added after them.';
 $string['errornopptx'] = 'The uploaded file is not a valid PowerPoint (.pptx) presentation.';
 $string['errornoslides'] = 'No slides could be found in the uploaded presentation.';
+$string['errorpdfrender'] = 'The PDF could not be converted to images. Please check the server\'s PDF tools (poppler).';
+$string['errorpdfunavailable'] = 'PDF import is not available on this site because the required PDF tools (poppler) were not found.';
 $string['errorstrictooxml'] = 'This presentation was saved as "Strict Open XML". Please re-save it as a standard PowerPoint (.pptx) presentation and try again.';
 $string['errortoolarge'] = 'The presentation contains a part that is too large to process safely.';
+$string['errortoomanypages'] = 'The PDF contains too many pages to import ({$a->count}; the limit is {$a->max}).';
 $string['errortoomanyslides'] = 'The presentation contains too many slides to import ({$a->count}; the limit is {$a->max}).';
 $string['eventimportcompleted'] = 'PowerPoint import completed';
 $string['file'] = 'PowerPoint presentation';
 $string['file_help'] = 'Upload a PowerPoint presentation in .pptx format. Each slide becomes one chapter in the book, with its text, lists, tables and images converted to editable HTML.';
+$string['filewithpdf'] = 'PowerPoint or PDF file';
+$string['filewithpdf_help'] = 'Upload a PowerPoint (.pptx) presentation or a PDF. Each PowerPoint slide becomes one editable chapter. Each PDF page becomes one chapter containing an image of the page.';
 $string['import'] = 'Import';
 $string['importpptx'] = 'Import PowerPoint';
 $string['importpptx:import'] = 'Import PowerPoint presentations into a book';
@@ -43,6 +48,7 @@ $string['optionimagemaxdim'] = 'Maximum image dimension (px)';
 $string['optionimagemaxdim_help'] = 'Images larger than this on their longest edge are down-scaled on import to keep the book lean. Enter 0 to keep the original images unchanged.';
 $string['optionsectioncolour'] = 'Section panel colour';
 $string['optionsectioncolour_help'] = 'Fallback colour (for example #442980) for the coloured plate on section-divider chapters. The importer uses the colour detected on the slide when it can; this value is used only when no fill can be read.';
+$string['pagetitle'] = 'Page {$a}';
 $string['pluginname'] = 'PowerPoint import';
 $string['privacy:metadata'] = 'The PowerPoint import tool does not store any personal data. It creates book chapters and files, which are stored and managed by the Book activity.';
 $string['sectiondefault'] = 'Section';

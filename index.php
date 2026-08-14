@@ -61,7 +61,8 @@ if ($cancelpending) {
     redirect($returnurl);
 }
 
-$mform = new \booktool_importpptx\form\import_form(null, ['id' => $cm->id]);
+$pdfenabled = \booktool_importpptx\pdf\renderer::is_available();
+$mform = new \booktool_importpptx\form\import_form(null, ['id' => $cm->id, 'pdfenabled' => $pdfenabled]);
 if ($mform->is_cancelled()) {
     redirect($returnurl);
 }
@@ -112,8 +113,18 @@ if ($data = $mform->get_data()) {
         );
     }
 
+    if (booktool_importpptx_type($file) === 'pdf' && !$pdfenabled) {
+        \booktool_importpptx\pending_file::delete($context, $pendingid);
+        redirect(
+            $PAGE->url,
+            get_string('errorpdfunavailable', 'booktool_importpptx'),
+            null,
+            \core\output\notification::NOTIFY_ERROR
+        );
+    }
+
     try {
-        $count = \booktool_importpptx\importer::count_slides($file);
+        $count = booktool_importpptx_count($file);
     } catch (\moodle_exception $e) {
         \booktool_importpptx\pending_file::delete($context, $pendingid);
         redirect($PAGE->url, $e->getMessage(), null, \core\output\notification::NOTIFY_ERROR);

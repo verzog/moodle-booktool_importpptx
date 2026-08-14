@@ -75,7 +75,11 @@ class import_task extends \core\task\adhoc_task {
 
         // Do not delete the staged upload in a finally: if the import throws on a
         // transient error, Moodle retries the adhoc task and needs the input intact.
-        $importer = new importer($book, $context, $options);
+        if (($data->type ?? 'pptx') === 'pdf') {
+            $importer = new \booktool_importpptx\pdf_importer($book, $context, $options);
+        } else {
+            $importer = new importer($book, $context, $options);
+        }
         $count = $importer->import($file);
         mtrace("booktool_importpptx: imported {$count} chapters into book {$book->id}.");
         \booktool_importpptx\pending_file::delete($context, $itemid);
