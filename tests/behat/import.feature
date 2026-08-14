@@ -15,7 +15,8 @@ Feature: Import a PowerPoint presentation into a book
   @javascript
   Scenario: The import action is available from the book navigation
     When I am on the "Test book" "book activity" page logged in as "admin"
-    Then "Import PowerPoint" "link" should exist
+    And I navigate to "Import PowerPoint" in current page administration
+    Then I should see "PowerPoint or PDF file"
 
   @javascript
   Scenario: Importing a deck creates a chapter per slide
