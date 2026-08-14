@@ -7,15 +7,21 @@ HTML that a teacher can keep editing in Atto or TinyMCE — not flat page images
 
 ## Why it runs anywhere
 
-The PowerPoint importer is **pure PHP**. A `.pptx` is a ZIP of XML, and this plugin
-reads it with PHP's bundled `ZipArchive` and `DOMDocument` only. There are **no
-external binaries** (no LibreOffice, Ghostscript or `unoconv`), no shell-outs and no
-third-party libraries on this path, so it works on shared and locked-down hosting.
+The PowerPoint importer is **pure PHP** for text, tables, SmartArt and raster
+images: a `.pptx` is a ZIP of XML, read with PHP's bundled `ZipArchive` and
+`DOMDocument`, so that path has no third-party libraries and works on shared and
+locked-down hosting.
 
-The optional **PDF backend** is different: a PDF has no editable structure to
-recover, so pages are rasterised to images. That needs the `poppler-utils` binaries
-(`pdfinfo`, `pdftoppm`), which most Linux hosts already ship. When they are not
-present the PDF option simply does not appear — the PowerPoint path is unaffected.
+Two things are handled outside pure PHP, each optional and gated:
+
+- **PDF import** rasterises pages to images and needs the `poppler-utils` binaries
+  (`pdfinfo`, `pdftoppm`). When they are absent the PDF option simply does not appear.
+- **Vector clip-art (WMF/EMF)** cannot be shown by browsers. A WMF that merely wraps
+  a bitmap is unpacked in pure PHP with no dependency; a true vector metafile is
+  converted to PNG using whichever of ImageMagick, LibreOffice or Inkscape is
+  installed, and is dropped cleanly when none is (see "Vector clip-art" below).
+
+Neither affects the core PowerPoint text/image path, which stays pure PHP.
 
 ## What it does
 
@@ -36,9 +42,11 @@ present the PDF option simply does not appear — the PowerPoint path is unaffec
   and height-capped rather than stretched full width, and images can optionally be
   down-scaled on import.
 - **Vector clip-art (WMF/EMF).** Older decks store clip-art as Windows metafiles,
-  which browsers cannot display. When a converter (ImageMagick, LibreOffice or
-  Inkscape) is available on the server these are converted to PNG on import;
-  when none is available they are dropped rather than left as broken images.
+  which browsers cannot display. A metafile that only wraps a bitmap is unpacked to
+  PNG in pure PHP; a true vector metafile is converted to PNG when a converter
+  (ImageMagick with a WMF/EMF delegate, LibreOffice, or Inkscape) is installed. When
+  a figure cannot be converted it — and any layout container it would leave empty —
+  is dropped, so the chapter never shows a broken image.
 - **Image grids.** Consecutive images become a responsive Bootstrap grid (up to
   three across, two images split 50/50). A run of images preceded by the same
   number of short lines is captioned, each caption above its image.

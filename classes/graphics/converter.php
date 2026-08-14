@@ -25,26 +25,30 @@
 namespace booktool_importpptx\graphics;
 
 /**
- * Optional, injection-safe wrapper that turns WMF/EMF vector images into PNG
- * using whichever external converter is installed (ImageMagick, LibreOffice or
- * Inkscape). Browsers cannot display WMF/EMF, so PowerPoint clip-art stored in
- * those formats is lost without this. It is strictly optional: when no converter
- * is available the caller drops the image rather than emit a broken one.
+ * Turns WMF/EMF vector images into PNG, which browsers can display.
+ *
+ * A WMF that merely wraps a bitmap is unpacked in pure PHP (no dependency). True
+ * vector metafiles need an external renderer and are converted with whichever of
+ * ImageMagick, LibreOffice or Inkscape is installed. When nothing can handle an
+ * image the caller drops it rather than emit a broken reference.
  */
 class converter {
-    /** @var bool Whether converter detection has run for this request. */
-    private static bool $checked = false;
+    /** @var int[] WMF record functions that carry a device-independent bitmap. */
+    private const DIB_RECORDS = [0x0F43, 0x0B41, 0x0940, 0x0D33, 0x0F41];
 
-    /** @var string|null The detected converter binary, or null if none works. */
-    private static ?string $tool = null;
+    /** @var string[]|null Cached list of external converter binaries that can run. */
+    private static ?array $tools = null;
 
     /**
-     * Whether a usable WMF/EMF converter is available.
+     * Whether an external WMF/EMF converter is installed.
      *
-     * @return bool True if one of the supported converters can be run.
+     * The pure-PHP bitmap path needs no external tool, so vector conversion may
+     * still fail while this returns false; it reports only the external renderers.
+     *
+     * @return bool True if at least one external converter can be run.
      */
     public static function is_available(): bool {
-        return self::detect() !== null;
+        return self::tools() !== [];
     }
 
     /**
@@ -52,53 +56,200 @@ class converter {
      *
      * @param string $bytes The source vector image bytes.
      * @param string $ext The source extension ('wmf' or 'emf').
-     * @return string|null The PNG bytes, or null if no converter is available or it failed.
+     * @return string|null The PNG bytes, or null if it could not be converted.
      */
     public static function to_png(string $bytes, string $ext): ?string {
-        $tool = self::detect();
-        if ($tool === null || $bytes === '') {
+        if ($bytes === '') {
             return null;
         }
-
-        $dir = make_request_directory();
-        $source = $dir . '/source.' . (strtolower($ext) === 'emf' ? 'emf' : 'wmf');
-        if (file_put_contents($source, $bytes) === false) {
-            return null;
+        // A bitmap wrapped in a WMF can be unpacked without any external tool.
+        if (strtolower($ext) === 'wmf') {
+            $png = self::wmf_bitmap_to_png($bytes);
+            if ($png !== null) {
+                return $png;
+            }
         }
-        $out = $dir . '/source.png';
+        return self::external_to_png($bytes, $ext);
+    }
 
-        if ($tool === 'soffice') {
-            // Give LibreOffice a private profile so it runs without a real home.
-            self::run([
-                'soffice', '--headless', '-env:UserInstallation=file://' . $dir . '/loprofile',
-                '--convert-to', 'png', '--outdir', $dir, $source,
-            ]);
-        } else if ($tool === 'inkscape') {
-            self::run(['inkscape', $source, '--export-type=png', '--export-filename=' . $out]);
-        } else {
-            // ImageMagick: "convert"/"magick" <input> <output>.
-            self::run([$tool, $source, $out]);
-        }
-
-        if (is_file($out) && filesize($out) > 0) {
-            $png = file_get_contents($out);
-            return ($png === false || $png === '') ? null : $png;
+    /**
+     * Converts using each installed external renderer until one succeeds.
+     *
+     * @param string $bytes The source vector image bytes.
+     * @param string $ext The source extension ('wmf' or 'emf').
+     * @return string|null The PNG bytes, or null if no renderer produced output.
+     */
+    private static function external_to_png(string $bytes, string $ext): ?string {
+        $ext = strtolower($ext) === 'emf' ? 'emf' : 'wmf';
+        foreach (self::tools() as $tool) {
+            // A fresh directory per attempt guarantees no stale output is mistaken
+            // for this conversion's result.
+            $dir = make_request_directory();
+            $source = $dir . '/source.' . $ext;
+            if (file_put_contents($source, $bytes) === false) {
+                continue;
+            }
+            $out = $dir . '/source.png';
+            if ($tool === 'soffice') {
+                self::run([
+                    'soffice', '--headless', '-env:UserInstallation=file://' . $dir . '/loprofile',
+                    '--convert-to', 'png', '--outdir', $dir, $source,
+                ]);
+            } else if ($tool === 'inkscape') {
+                self::run(['inkscape', $source, '--export-type=png', '--export-filename=' . $out]);
+            } else {
+                self::run([$tool, $source, $out]);
+            }
+            if (is_file($out) && filesize($out) > 0) {
+                $png = file_get_contents($out);
+                if ($png !== false && $png !== '') {
+                    return $png;
+                }
+            }
         }
         return null;
     }
 
     /**
-     * Detects (once per request) the first supported converter that can run.
+     * Unpacks a bitmap stored inside a WMF, in pure PHP, when the metafile is
+     * essentially a single raster image rather than vector drawing commands.
      *
-     * @return string|null The converter binary name, or null if none is usable.
+     * @param string $bytes The WMF bytes.
+     * @return string|null The PNG bytes, or null if the WMF is not a bitmap wrapper.
      */
-    private static function detect(): ?string {
-        if (self::$checked) {
-            return self::$tool;
+    private static function wmf_bitmap_to_png(string $bytes): ?string {
+        if (!function_exists('imagecreatefromstring')) {
+            return null;
         }
-        self::$checked = true;
-        self::$tool = null;
+        $len = strlen($bytes);
+        $offset = 0;
+        // Skip the optional 22-byte placeable header.
+        if (substr($bytes, 0, 4) === "\xD7\xCD\xC6\x9A") {
+            $offset = 22;
+        }
+        if ($offset + 18 > $len) {
+            return null;
+        }
+        $type = unpack('v', substr($bytes, $offset, 2))[1];
+        if ($type !== 1 && $type !== 2) {
+            return null;
+        }
 
+        $pos = $offset + 18;
+        $beststart = null;
+        $bestbytes = 0;
+        while ($pos + 6 <= $len) {
+            $recwords = unpack('V', substr($bytes, $pos, 4))[1];
+            $func = unpack('v', substr($bytes, $pos + 4, 2))[1];
+            if ($recwords < 3) {
+                break;
+            }
+            $recbytes = $recwords * 2;
+            if ($pos + $recbytes > $len) {
+                break;
+            }
+            if (in_array($func, self::DIB_RECORDS, true) && $recbytes > $bestbytes) {
+                $bestbytes = $recbytes;
+                $beststart = $pos;
+            }
+            $pos += $recbytes;
+        }
+        // Only treat the metafile as a bitmap wrapper when one DIB dominates it;
+        // otherwise it is genuine vector art for the external renderer to handle.
+        if ($beststart === null || $bestbytes < $len * 0.5) {
+            return null;
+        }
+
+        $record = substr($bytes, $beststart + 6, $bestbytes - 6);
+        $dib = self::find_dib($record);
+        if ($dib === null) {
+            return null;
+        }
+        return self::dib_to_png($dib);
+    }
+
+    /**
+     * Locates a BITMAPINFOHEADER-based DIB within a WMF record's parameters.
+     *
+     * @param string $record The record bytes (after the size and function words).
+     * @return string|null The DIB bytes from the header onward, or null if not found.
+     */
+    private static function find_dib(string $record): ?string {
+        $len = strlen($record);
+        for ($o = 0; $o + 40 <= $len; $o += 2) {
+            if (unpack('V', substr($record, $o, 4))[1] !== 40) {
+                continue;
+            }
+            $width = self::to_signed(unpack('V', substr($record, $o + 4, 4))[1]);
+            $height = self::to_signed(unpack('V', substr($record, $o + 8, 4))[1]);
+            $planes = unpack('v', substr($record, $o + 12, 2))[1];
+            $bpp = unpack('v', substr($record, $o + 14, 2))[1];
+            if (
+                $planes === 1 && in_array($bpp, [1, 4, 8, 16, 24, 32], true)
+                    && $width > 0 && $width <= 20000 && abs($height) > 0 && abs($height) <= 20000
+            ) {
+                return substr($record, $o);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Wraps a DIB in a BMP file header and rasterises it to PNG via GD.
+     *
+     * @param string $dib The DIB bytes (BITMAPINFOHEADER onward).
+     * @return string|null The PNG bytes, or null if GD could not decode the bitmap.
+     */
+    private static function dib_to_png(string $dib): ?string {
+        $bisize = unpack('V', substr($dib, 0, 4))[1];
+        $bpp = unpack('v', substr($dib, 14, 2))[1];
+        $compression = unpack('V', substr($dib, 16, 4))[1];
+        $clrused = unpack('V', substr($dib, 32, 4))[1];
+
+        $palette = 0;
+        if ($bpp <= 8) {
+            $palette = ($clrused > 0 ? $clrused : (1 << $bpp)) * 4;
+        }
+        // BI_BITFIELDS stores three colour masks between the header and the pixels.
+        if ($compression === 3 && ($bpp === 16 || $bpp === 32)) {
+            $palette += 12;
+        }
+        $offbits = 14 + $bisize + $palette;
+        $header = 'BM' . pack('V', 14 + strlen($dib)) . pack('v', 0) . pack('v', 0) . pack('V', $offbits);
+
+        $image = @imagecreatefromstring($header . $dib);
+        if ($image === false) {
+            return null;
+        }
+        ob_start();
+        imagealphablending($image, false);
+        imagesavealpha($image, true);
+        imagepng($image);
+        $png = ob_get_clean();
+        imagedestroy($image);
+        return ($png === false || $png === '') ? null : $png;
+    }
+
+    /**
+     * Interprets an unsigned 32-bit value as a signed integer.
+     *
+     * @param int $value The unsigned value from unpack('V').
+     * @return int The signed equivalent.
+     */
+    private static function to_signed(int $value): int {
+        return $value >= 0x80000000 ? $value - 0x100000000 : $value;
+    }
+
+    /**
+     * Returns the external converter binaries that can be run, detected once.
+     *
+     * @return string[] The runnable converter binary names, in preference order.
+     */
+    private static function tools(): array {
+        if (self::$tools !== null) {
+            return self::$tools;
+        }
+        self::$tools = [];
         $candidates = [
             'convert' => ['-version', 'ImageMagick'],
             'magick' => ['-version', 'ImageMagick'],
@@ -109,11 +260,14 @@ class converter {
             [$flag, $needle] = $probe;
             $result = self::run([$binary, $flag]);
             if ($result['started'] && stripos($result['out'] . $result['err'], $needle) !== false) {
-                self::$tool = $binary;
-                break;
+                self::$tools[] = $binary;
             }
         }
-        return self::$tool;
+        // ImageMagick exposes both "convert" and "magick"; one is enough.
+        if (in_array('convert', self::$tools, true) && in_array('magick', self::$tools, true)) {
+            self::$tools = array_values(array_diff(self::$tools, ['magick']));
+        }
+        return self::$tools;
     }
 
     /**

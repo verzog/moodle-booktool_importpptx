@@ -213,6 +213,54 @@ final class importer_test extends \advanced_testcase {
     }
 
     /**
+     * A bitmap wrapped in a WMF converts to PNG in pure PHP, with no external tool.
+     */
+    public function test_wmf_bitmap_converted_in_pure_php(): void {
+        if (!function_exists('imagecreatefromstring')) {
+            $this->markTestSkipped('GD is not available.');
+        }
+        $png = \booktool_importpptx\graphics\converter::to_png($this->bitmap_wmf(), 'wmf');
+        $this->assertNotNull($png);
+        $this->assertSame("\x89PNG", substr($png, 0, 4));
+    }
+
+    /**
+     * A failed image drops its layout container so no empty figure/cell remains.
+     */
+    public function test_failed_image_removes_its_container(): void {
+        $method = new \ReflectionMethod(importer::class, 'strip_images');
+        $method->setAccessible(true);
+        $html = '<p>Keep</p><div class="booktool-importpptx-figure">'
+            . '<img src="@@PLUGINFILE@@/gone.png" alt="" class="img-fluid"></div>';
+        $out = $method->invoke(null, $html, ['gone.png']);
+        $this->assertStringContainsString('<p>Keep</p>', $out);
+        $this->assertStringNotContainsString('gone.png', $out);
+        $this->assertStringNotContainsString('booktool-importpptx-figure', $out);
+    }
+
+    /**
+     * Builds a minimal WMF that wraps a 2x2 24-bit bitmap.
+     *
+     * @return string The WMF bytes.
+     */
+    private function bitmap_wmf(): string {
+        $bih = pack('VVVvvVVVVVV', 40, 2, 2, 1, 24, 0, 0, 0, 0, 0, 0);
+        $row = "\xFF\x00\x00" . "\x00\xFF\x00" . "\x00\x00";
+        $dib = $bih . $row . $row;
+        $params = pack('V', 0x00CC0020) . pack('v', 0) . pack('vvvv', 2, 2, 0, 0)
+            . pack('vvvv', 2, 2, 0, 0) . $dib;
+        $recwords = intdiv(6 + strlen($params), 2);
+        $stretch = pack('V', $recwords) . pack('v', 0x0F43) . $params;
+        $eof = pack('V', 3) . pack('v', 0);
+        $totalwords = 9 + intdiv(strlen($stretch), 2) + 3;
+        $std = pack('v', 1) . pack('v', 9) . pack('v', 0x0300) . pack('V', $totalwords)
+            . pack('v', 0) . pack('V', $recwords) . pack('v', 0);
+        $placeable = pack('V', 0x9AC6CDD7) . pack('v', 0) . pack('vvvv', 0, 0, 2, 2)
+            . pack('v', 96) . pack('V', 0) . pack('v', 0);
+        return $placeable . $std . $stretch . $eof;
+    }
+
+    /**
      * SmartArt text is recovered as a flat list; tables become HTML tables.
      */
     public function test_smartart_and_table(): void {

@@ -166,12 +166,15 @@ class importer {
 
         $now = time();
 
-        // Prepare each image before the chapter is written. Vector formats a
-        // browser cannot display (WMF/EMF) are converted to PNG when a converter
-        // is available; images that cannot be prepared are dropped from the HTML
-        // so the chapter never references a broken or unrenderable file.
+        // Prepare each image before the chapter is written, staging the result on
+        // disk so only one image is held in memory at a time. Vector formats a
+        // browser cannot display (WMF/EMF) are converted to PNG when possible;
+        // images that cannot be prepared are removed from the HTML so the chapter
+        // never references a broken or unrenderable file.
+        $stagedir = make_request_directory();
         $ready = [];
         $failed = [];
+        $index = 0;
         foreach ($images as $filename => $mediapath) {
             $bytes = $package->get_bytes($mediapath);
             if ($bytes === null || $bytes === '') {
@@ -189,7 +192,13 @@ class importer {
             if ($maxdim > 0) {
                 $bytes = self::downscale($bytes, $maxdim);
             }
-            $ready[$filename] = $bytes;
+            $staged = $stagedir . '/' . $index++;
+            if (file_put_contents($staged, $bytes) === false) {
+                $failed[] = $filename;
+                continue;
+            }
+            unset($bytes);
+            $ready[$filename] = $staged;
         }
         if (!empty($failed)) {
             $html = self::strip_images($html, $failed);
@@ -213,18 +222,18 @@ class importer {
         $chapter->id = $DB->insert_record('book_chapters', $chapter);
 
         $fs = get_file_storage();
-        foreach ($ready as $filename => $bytes) {
+        foreach ($ready as $filename => $staged) {
             if ($fs->file_exists($this->context->id, 'mod_book', 'chapter', $chapter->id, '/', $filename)) {
                 continue;
             }
-            $fs->create_file_from_string([
+            $fs->create_file_from_pathname([
                 'contextid' => $this->context->id,
                 'component' => 'mod_book',
                 'filearea' => 'chapter',
                 'itemid' => $chapter->id,
                 'filepath' => '/',
                 'filename' => $filename,
-            ], $bytes);
+            ], $staged);
         }
 
         $event = \mod_book\event\chapter_created::create([
@@ -237,18 +246,68 @@ class importer {
     }
 
     /**
-     * Removes the <img> tags whose @@PLUGINFILE@@ source is one of the given files.
+     * Removes the images that could not be prepared, along with any figure,
+     * column or grid container they leave empty, so the chapter reflows cleanly.
      *
      * @param string $html The chapter HTML.
-     * @param string[] $filenames Filenames whose image could not be prepared.
-     * @return string The HTML with those images removed.
+     * @param string[] $filenames Filenames (case-sensitive) whose image failed.
+     * @return string The cleaned HTML.
      */
     private static function strip_images(string $html, array $filenames): string {
-        foreach ($filenames as $filename) {
-            $pattern = '/<img\b[^>]*@@PLUGINFILE@@\/' . preg_quote($filename, '/') . '[^>]*>/i';
-            $html = preg_replace($pattern, '', $html);
+        if (trim($html) === '' || empty($filenames)) {
+            return $html;
         }
-        return $html;
+        $failed = array_fill_keys($filenames, true);
+
+        $doc = new \DOMDocument();
+        $previous = libxml_use_internal_errors(true);
+        $loaded = $doc->loadHTML(
+            '<?xml encoding="utf-8"?><body>' . $html . '</body>',
+            LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD | LIBXML_NONET
+        );
+        libxml_clear_errors();
+        libxml_use_internal_errors($previous);
+        if (!$loaded) {
+            return $html;
+        }
+
+        $xpath = new \DOMXPath($doc);
+        foreach (iterator_to_array($xpath->query('//img')) as $img) {
+            $src = $img->getAttribute('src');
+            if (preg_match('#@@PLUGINFILE@@/(.+)$#', $src, $m) && isset($failed[$m[1]])) {
+                $img->parentNode->removeChild($img);
+            }
+        }
+
+        // Remove figures and image cells that no longer hold an image, then any
+        // grid/column rows left without cells, repeating until nothing else clears.
+        $has = static function (string $class): string {
+            return 'contains(concat(" ", normalize-space(@class), " "), " ' . $class . ' ")';
+        };
+        $cells = '//*[' . $has('booktool-importpptx-figure') . '][not(.//img)]'
+            . ' | //*[' . $has('booktool-importpptx-grid') . ']/*[not(.//img)]';
+        $rows = '//*[' . $has('booktool-importpptx-grid') . '][not(*)]'
+            . ' | //*[' . $has('booktool-importpptx-cols') . '][not(*)]'
+            . ' | //*[contains(concat(" ", normalize-space(@class), " "), " col-")][not(*) and not(normalize-space(.))]';
+        do {
+            $removed = false;
+            foreach (iterator_to_array($xpath->query($cells . ' | ' . $rows)) as $node) {
+                if ($node->parentNode !== null) {
+                    $node->parentNode->removeChild($node);
+                    $removed = true;
+                }
+            }
+        } while ($removed);
+
+        $body = $doc->getElementsByTagName('body')->item(0);
+        if ($body === null) {
+            return $html;
+        }
+        $out = '';
+        foreach ($body->childNodes as $child) {
+            $out .= $doc->saveHTML($child);
+        }
+        return $out;
     }
 
     /**
