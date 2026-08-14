@@ -62,7 +62,6 @@ function booktool_importpptx_extend_settings_navigation(
         $url,
         navigation_node::TYPE_SETTING,
         null,
-        'importpptx',
-        new pix_icon('i/import', '')
+        'importpptx'
     );
 }
