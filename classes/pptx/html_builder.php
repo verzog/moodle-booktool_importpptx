@@ -38,6 +38,9 @@ class html_builder {
     /** @var int A single short line up to this length can be promoted to the chapter title. */
     const TITLE_FALLBACK_MAX_CHARS = 60;
 
+    /** @var int Minimum horizontal gap (EMU, ~1 inch) between blocks for a genuine column split. */
+    const COLUMN_GAP_EMU = 914400;
+
     /** @var string Fallback plate colour when a slide's own fill cannot be read. */
     private string $defaultcolour;
 
@@ -147,107 +150,240 @@ class html_builder {
     }
 
     /**
-     * Renders a list of blocks to HTML, grouping consecutive images into grids
-     * and pairing short preceding captions with them.
+     * Renders a list of blocks to HTML.
+     *
+     * Blocks are grouped into the horizontal bands reading order already uses;
+     * a band holding several side-by-side blocks becomes even Bootstrap columns,
+     * so slides laid out in two or three columns (or text beside an image) keep
+     * that arrangement. Consecutive image rows collapse into a responsive grid,
+     * and a row of short lines directly above an equal-sized row of images is
+     * paired as captions.
      *
      * @param block[] $blocks The blocks to render (any order).
      * @return string The rendered HTML.
      */
     private function render_items(array $blocks): string {
-        $tokens = [];
-        foreach (reading_order::sort($blocks) as $b) {
-            if ($b->type === block::TYPE_IMAGE) {
-                $tokens[] = ['img', $this->register_image($b->content)];
-            } else if ($b->type === block::TYPE_HTML) {
-                $tokens[] = ['block', $b->content];
-            } else if ($b->type === block::TYPE_TEXT) {
-                $paras = array_map(static function (string $p): string {
-                    return str_replace("\n", '<br>', $p);
-                }, $b->content);
-                if (count($paras) >= 2) {
-                    $lis = '';
-                    foreach ($paras as $p) {
-                        $lis .= '<li>' . $p . '</li>';
-                    }
-                    $tokens[] = ['block', '<ul>' . $lis . '</ul>'];
-                } else {
-                    $tokens[] = ['p', $paras[0]];
+        $bands = $this->into_bands(reading_order::sort($blocks));
+        $parts = [];
+        $count = count($bands);
+        $b = 0;
+        while ($b < $count) {
+            $band = $bands[$b];
+
+            // A row of short lines directly above an equal row of images: captions.
+            $caps = $this->caption_texts($band);
+            if ($caps !== null && $b + 1 < $count) {
+                $next = $this->image_refs($bands[$b + 1]);
+                if ($next !== null && count($next) === count($caps)) {
+                    $parts[] = $this->render_grid($next, $caps);
+                    $b += 2;
+                    continue;
                 }
             }
-        }
 
-        $out = $this->group_images($tokens);
-
-        $html = [];
-        foreach ($out as $tok) {
-            switch ($tok[0]) {
-                case 'p':
-                    $html[] = '<p>' . $tok[1] . '</p>';
-                    break;
-                case 'block':
-                    $html[] = $tok[1];
-                    break;
-                case 'img1':
-                    $html[] = '<img src="' . $tok[1] . '" alt="" class="img-fluid">';
-                    break;
-                case 'grid':
-                    $html[] = $this->render_grid($tok[1], $tok[2]);
-                    break;
+            // One or more consecutive image-only rows become a single grid.
+            $imgs = $this->image_refs($band);
+            if ($imgs !== null) {
+                $b2 = $b + 1;
+                while ($b2 < $count && ($more = $this->image_refs($bands[$b2])) !== null) {
+                    $imgs = array_merge($imgs, $more);
+                    $b2++;
+                }
+                $parts[] = count($imgs) === 1
+                    ? $this->render_figure($imgs[0])
+                    : $this->render_grid($imgs, null);
+                $b = $b2;
+                continue;
             }
+
+            // A single block fills the width; several side by side become columns.
+            $parts[] = count($band) === 1 ? $this->render_block($band[0]) : $this->render_columns($band);
+            $b++;
         }
-        return implode("\n", $html);
+        return implode("\n", $parts);
     }
 
     /**
-     * Collapses runs of image tokens into single-image or grid tokens, pairing
-     * captions when a run of N images is preceded by exactly N short paragraphs.
+     * Partitions blocks already in reading order into consecutive row bands.
      *
-     * @param array[] $tokens The flat token list.
-     * @return array[] The regrouped token list.
+     * @param block[] $blocks Blocks in reading order.
+     * @return array[] A list of bands, each a left-to-right block[].
      */
-    private function group_images(array $tokens): array {
-        $out = [];
-        $i = 0;
-        $n = count($tokens);
-        while ($i < $n) {
-            if ($tokens[$i][0] !== 'img') {
-                $out[] = $tokens[$i];
-                $i++;
-                continue;
+    private function into_bands(array $blocks): array {
+        $bands = [];
+        $current = [];
+        $lastband = null;
+        foreach ($blocks as $b) {
+            $band = intdiv($b->y, reading_order::ROW_BAND_EMU);
+            if ($lastband !== null && $band !== $lastband && $current !== []) {
+                $bands[] = $current;
+                $current = [];
             }
-            $j = $i;
-            while ($j < $n && $tokens[$j][0] === 'img') {
-                $j++;
-            }
-            $imgs = array_map(static function (array $t): string {
-                return $t[1];
-            }, array_slice($tokens, $i, $j - $i));
-            $k = count($imgs);
-            if ($k === 1) {
-                $out[] = ['img1', $imgs[0]];
-            } else {
-                $caps = null;
-                if (count($out) >= $k) {
-                    $tail = array_slice($out, -$k);
-                    $allshort = true;
-                    foreach ($tail as $t) {
-                        if (!$this->is_short_paragraph($t)) {
-                            $allshort = false;
-                            break;
-                        }
-                    }
-                    if ($allshort) {
-                        $caps = array_map(static function (array $t): string {
-                            return $t[1];
-                        }, $tail);
-                        array_splice($out, -$k);
-                    }
-                }
-                $out[] = ['grid', $imgs, $caps];
-            }
-            $i = $j;
+            $current[] = $b;
+            $lastband = $band;
         }
-        return $out;
+        if ($current !== []) {
+            $bands[] = $current;
+        }
+        return $bands;
+    }
+
+    /**
+     * Returns the image references for a band if every block in it is an image.
+     *
+     * @param block[] $band The band's blocks.
+     * @return string[]|null Registered @@PLUGINFILE@@ refs, or null if not all images.
+     */
+    private function image_refs(array $band): ?array {
+        $refs = [];
+        foreach ($band as $b) {
+            if ($b->type !== block::TYPE_IMAGE) {
+                return null;
+            }
+            $refs[] = $this->register_image($b->content);
+        }
+        return $refs;
+    }
+
+    /**
+     * Returns caption strings if a band is entirely short, single-line text.
+     *
+     * @param block[] $band The band's blocks.
+     * @return string[]|null Inline caption HTML per block, or null if unsuitable.
+     */
+    private function caption_texts(array $band): ?array {
+        if (count($band) < 2) {
+            return null;
+        }
+        $caps = [];
+        foreach ($band as $b) {
+            if ($b->type !== block::TYPE_TEXT || count($b->content) !== 1) {
+                return null;
+            }
+            $inline = str_replace("\n", ' ', $b->content[0]);
+            if (\core_text::strlen(trim(strip_tags($inline))) > self::CAPTION_MAX_CHARS) {
+                return null;
+            }
+            $caps[] = $inline;
+        }
+        return $caps;
+    }
+
+    /**
+     * Renders same-row blocks as columns, but only when they occupy genuinely
+     * distinct horizontal regions; blocks sharing an x (stacked or overlaid, such
+     * as a picture fill and its text) are stacked in reading order instead.
+     *
+     * @param block[] $band The band's blocks, left to right.
+     * @return string The row HTML.
+     */
+    private function render_columns(array $band): string {
+        $columns = $this->cluster_by_x($band);
+        // One horizontal group, or too many to sit side by side cleanly: just stack.
+        if (count($columns) < 2 || count($columns) > 4) {
+            $stack = '';
+            foreach ($band as $b) {
+                $stack .= $this->render_block($b);
+            }
+            return $stack;
+        }
+        $col = 'col-12 col-md-' . intdiv(12, count($columns));
+        $cells = '';
+        foreach ($columns as $group) {
+            $inner = '';
+            foreach ($group as $b) {
+                $inner .= $this->render_cell($b);
+            }
+            $cells .= '<div class="' . $col . '">' . $inner . '</div>';
+        }
+        return '<div class="row g-3 mb-3 booktool-importpptx-cols">' . $cells . '</div>';
+    }
+
+    /**
+     * Groups a band's blocks into horizontal clusters (columns): consecutive
+     * blocks whose x offsets are within {@see self::COLUMN_GAP_EMU} share a column.
+     *
+     * @param block[] $band The band's blocks, sorted left to right.
+     * @return array[] A list of columns, each a block[] in reading order.
+     */
+    private function cluster_by_x(array $band): array {
+        $clusters = [];
+        $current = [];
+        $lastx = null;
+        foreach ($band as $b) {
+            if ($lastx !== null && $b->x - $lastx > self::COLUMN_GAP_EMU && $current !== []) {
+                $clusters[] = $current;
+                $current = [];
+            }
+            $current[] = $b;
+            $lastx = $b->x;
+        }
+        if ($current !== []) {
+            $clusters[] = $current;
+        }
+        return $clusters;
+    }
+
+    /**
+     * Renders a single block's inner HTML with no column or figure wrapper.
+     *
+     * @param block $b The block.
+     * @return string The inner HTML.
+     */
+    private function render_cell(block $b): string {
+        if ($b->type === block::TYPE_IMAGE) {
+            return '<img src="' . $this->register_image($b->content) . '" alt="" class="img-fluid">';
+        }
+        if ($b->type === block::TYPE_HTML) {
+            return $b->content;
+        }
+        if ($b->type === block::TYPE_TEXT) {
+            return $this->text_html($b->content);
+        }
+        return '';
+    }
+
+    /**
+     * Renders one full-width block, constraining a lone image to a centred figure.
+     *
+     * @param block $b The block.
+     * @return string The HTML.
+     */
+    private function render_block(block $b): string {
+        if ($b->type === block::TYPE_IMAGE) {
+            return $this->render_figure($this->register_image($b->content));
+        }
+        return $this->render_cell($b);
+    }
+
+    /**
+     * Renders a text block: a list when multi-line, otherwise a paragraph.
+     *
+     * @param string[] $paras The paragraph HTML strings.
+     * @return string The rendered HTML.
+     */
+    private function text_html(array $paras): string {
+        $paras = array_map(static function (string $p): string {
+            return str_replace("\n", '<br>', $p);
+        }, $paras);
+        if (count($paras) >= 2) {
+            $lis = '';
+            foreach ($paras as $p) {
+                $lis .= '<li>' . $p . '</li>';
+            }
+            return '<ul>' . $lis . '</ul>';
+        }
+        return '<p>' . ($paras[0] ?? '') . '</p>';
+    }
+
+    /**
+     * Renders a lone image as a centred, size-capped figure.
+     *
+     * @param string $ref The image @@PLUGINFILE@@ reference.
+     * @return string The figure HTML.
+     */
+    private function render_figure(string $ref): string {
+        return '<div class="booktool-importpptx-figure"><img src="' . $ref . '" alt="" class="img-fluid"></div>';
     }
 
     /**
@@ -269,21 +405,7 @@ class html_builder {
             $cells .= '<div class="' . $col . '">' . $cap
                 . '<img src="' . $ref . '" alt="" class="img-fluid"></div>';
         }
-        return '<div class="row booktool-importpptx-grid">' . $cells . '</div>';
-    }
-
-    /**
-     * Whether a token is a paragraph short enough to serve as an image caption.
-     *
-     * @param array $token A single token.
-     * @return bool True for a short 'p' token.
-     */
-    private function is_short_paragraph(array $token): bool {
-        if ($token[0] !== 'p') {
-            return false;
-        }
-        $text = str_replace('<br>', ' ', strip_tags($token[1]));
-        return \core_text::strlen(trim($text)) <= self::CAPTION_MAX_CHARS;
+        return '<div class="row g-3 booktool-importpptx-grid">' . $cells . '</div>';
     }
 
     /**
