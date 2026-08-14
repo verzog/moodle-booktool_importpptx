@@ -36,16 +36,27 @@ function booktool_importpptx_extend_settings_navigation(
     settings_navigation $settingsnav,
     navigation_node $booknode
 ) {
-    $page = $settingsnav->get_page();
-    if (empty($page->cm)) {
+    global $PAGE;
+
+    // The course module can come from either the navigation's own page or the
+    // global page, depending on how the settings navigation was built. Read from
+    // whichever is populated so the action shows in every book context.
+    $cm = null;
+    if (!empty($settingsnav->get_page()->cm)) {
+        $cm = $settingsnav->get_page()->cm;
+    } else if (!empty($PAGE->cm)) {
+        $cm = $PAGE->cm;
+    }
+    if (empty($cm) || $cm->modname !== 'book') {
         return;
     }
 
-    if (!has_capability('booktool/importpptx:import', $page->cm->context)) {
+    $context = !empty($cm->context) ? $cm->context : context_module::instance($cm->id);
+    if (!has_capability('booktool/importpptx:import', $context)) {
         return;
     }
 
-    $url = new moodle_url('/mod/book/tool/importpptx/index.php', ['id' => $page->cm->id]);
+    $url = new moodle_url('/mod/book/tool/importpptx/index.php', ['id' => $cm->id]);
     $booknode->add(
         get_string('importpptx', 'booktool_importpptx'),
         $url,
