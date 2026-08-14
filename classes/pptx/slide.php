@@ -227,6 +227,9 @@ class slide {
             }
             return;
         }
+        // A shape can carry an image as a picture fill rather than as a <p:pic>;
+        // recover it so styled image frames and picture placeholders are not lost.
+        $this->collect_shape_fill($sp, $xpath, $out, $y, $x);
         $paras = $this->paragraphs($sp, $xpath);
         if (empty($paras)) {
             return;
@@ -236,6 +239,28 @@ class slide {
             return;
         }
         $out[] = new block(block::TYPE_TEXT, $y, $x, $paras);
+    }
+
+    /**
+     * Emits an image block for a shape whose fill is an embedded picture.
+     *
+     * @param \DOMElement $sp The p:sp element.
+     * @param \DOMXPath $xpath Namespaced XPath.
+     * @param block[] $out Accumulator, passed by reference.
+     * @param int $y The shape's vertical offset in EMU.
+     * @param int $x The shape's horizontal offset in EMU.
+     * @return void
+     */
+    private function collect_shape_fill(\DOMElement $sp, \DOMXPath $xpath, array &$out, int $y, int $x): void {
+        $blip = $xpath->query('./p:spPr/a:blipFill/a:blip', $sp)->item(0);
+        if (!$blip instanceof \DOMElement) {
+            return;
+        }
+        $rid = $blip->getAttributeNS(package::NS_R, 'embed');
+        if ($rid === '' || !isset($this->rels[$rid])) {
+            return;
+        }
+        $out[] = new block(block::TYPE_IMAGE, $y, $x, $this->rels[$rid]);
     }
 
     /**

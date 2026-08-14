@@ -27,6 +27,7 @@ namespace booktool_importpptx;
 use booktool_importpptx\pptx\package;
 use booktool_importpptx\pptx\slide;
 use booktool_importpptx\pptx\html_builder;
+use booktool_importpptx\pptx\block;
 
 /**
  * Tests extraction and chapter creation against a synthetic fixture deck.
@@ -125,6 +126,44 @@ final class importer_test extends \advanced_testcase {
         $this->assertStringContainsString('col-12 col-md-6 col-lg-4', $html);
         $this->assertStringContainsString('<div class="booktool-importpptx-cap">13:00</div>', $html);
         $this->assertCount(3, $chapters[2]->images);
+    }
+
+    /**
+     * Two blocks sharing a horizontal band are laid out as side-by-side columns.
+     */
+    public function test_side_by_side_blocks_become_columns(): void {
+        $builder = new html_builder('#442980');
+        $parsed = (object) [
+            'title' => 'Two up',
+            'section' => null,
+            'blocks' => [
+                new block(block::TYPE_TEXT, 2000000, 0, ['Left column paragraph.']),
+                new block(block::TYPE_IMAGE, 2000000, 7000000, 'ppt/media/image1.png'),
+            ],
+        ];
+        $out = $builder->build($parsed);
+        $this->assertStringContainsString('booktool-importpptx-cols', $out->html);
+        $this->assertStringContainsString('col-12 col-md-6', $out->html);
+        $this->assertStringContainsString('<p>Left column paragraph.</p>', $out->html);
+        $this->assertStringContainsString('@@PLUGINFILE@@/image1.png', $out->html);
+    }
+
+    /**
+     * A lone image is wrapped in a centred, size-capped figure, not left full-bleed.
+     */
+    public function test_single_image_is_a_constrained_figure(): void {
+        $builder = new html_builder('#442980');
+        $parsed = (object) [
+            'title' => 'One image',
+            'section' => null,
+            'blocks' => [
+                new block(block::TYPE_IMAGE, 3000000, 3000000, 'ppt/media/pic.png'),
+            ],
+        ];
+        $out = $builder->build($parsed);
+        $this->assertStringContainsString('booktool-importpptx-figure', $out->html);
+        $this->assertStringNotContainsString('booktool-importpptx-grid', $out->html);
+        $this->assertCount(1, $out->images);
     }
 
     /**

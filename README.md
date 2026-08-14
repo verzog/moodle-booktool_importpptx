@@ -23,14 +23,19 @@ present the PDF option simply does not appear — the PowerPoint path is unaffec
 - **Titles.** A slide's title placeholder becomes the chapter title. With no
   placeholder, a short leading line is promoted; otherwise the chapter is
   `Slide N`.
-- **Reading order.** Blocks are ordered top-to-bottom in half-inch rows and
-  left-to-right within a row, so multi-column slides come out in the right order.
+- **Reading order and columns.** Blocks are ordered top-to-bottom in half-inch
+  rows and left-to-right within a row. When a row holds several blocks side by
+  side — text beside an image, or two/three columns — they become even Bootstrap
+  columns that keep the arrangement on desktop and stack on mobile.
 - **Text.** Paragraphs become `<p>`; multi-line text boxes become `<ul>`; bold
   runs and line breaks are preserved; decorative one- or two-character badges are
   dropped.
 - **Images.** Pictures are saved into the book's own file area and referenced with
-  `@@PLUGINFILE@@`. Vector art uses PowerPoint's raster fallback so it renders in a
-  browser. Images can optionally be down-scaled on import.
+  `@@PLUGINFILE@@`. Both standalone pictures and images used as a shape's fill
+  (styled frames and picture placeholders) are recovered. Vector art uses
+  PowerPoint's raster fallback so it renders in a browser. A lone image is centred
+  and height-capped rather than stretched full width, and images can optionally be
+  down-scaled on import.
 - **Image grids.** Consecutive images become a responsive Bootstrap grid (up to
   three across, two images split 50/50). A run of images preceded by the same
   number of short lines is captioned, each caption above its image.
