@@ -185,6 +185,34 @@ final class importer_test extends \advanced_testcase {
     }
 
     /**
+     * WMF/EMF vector images are referenced as PNG (the importer converts them).
+     */
+    public function test_wmf_image_referenced_as_png(): void {
+        $builder = new html_builder('#442980');
+        $parsed = (object) [
+            'title' => 'Clip',
+            'section' => null,
+            'blocks' => [
+                new block(block::TYPE_IMAGE, 3000000, 3000000, 'ppt/media/image1.wmf'),
+            ],
+        ];
+        $out = $builder->build($parsed);
+        $this->assertStringContainsString('@@PLUGINFILE@@/image1.png', $out->html);
+        $this->assertStringNotContainsString('image1.wmf', $out->html);
+        // The images map still points at the source .wmf for the importer to convert.
+        $this->assertSame('ppt/media/image1.wmf', $out->images['image1.png']);
+    }
+
+    /**
+     * The vector converter fails safely on invalid input, whether or not a tool exists.
+     */
+    public function test_vector_converter_rejects_invalid_input(): void {
+        $this->assertNull(
+            \booktool_importpptx\graphics\converter::to_png('not a real metafile', 'wmf')
+        );
+    }
+
+    /**
      * SmartArt text is recovered as a flat list; tables become HTML tables.
      */
     public function test_smartart_and_table(): void {

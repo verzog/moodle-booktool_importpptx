@@ -165,6 +165,36 @@ class importer {
         global $DB;
 
         $now = time();
+
+        // Prepare each image before the chapter is written. Vector formats a
+        // browser cannot display (WMF/EMF) are converted to PNG when a converter
+        // is available; images that cannot be prepared are dropped from the HTML
+        // so the chapter never references a broken or unrenderable file.
+        $ready = [];
+        $failed = [];
+        foreach ($images as $filename => $mediapath) {
+            $bytes = $package->get_bytes($mediapath);
+            if ($bytes === null || $bytes === '') {
+                $failed[] = $filename;
+                continue;
+            }
+            $ext = strtolower((string) pathinfo($mediapath, PATHINFO_EXTENSION));
+            if ($ext === 'wmf' || $ext === 'emf') {
+                $bytes = \booktool_importpptx\graphics\converter::to_png($bytes, $ext);
+                if ($bytes === null) {
+                    $failed[] = $filename;
+                    continue;
+                }
+            }
+            if ($maxdim > 0) {
+                $bytes = self::downscale($bytes, $maxdim);
+            }
+            $ready[$filename] = $bytes;
+        }
+        if (!empty($failed)) {
+            $html = self::strip_images($html, $failed);
+        }
+
         // The book_chapters.title column holds 255 characters; a longer placeholder
         // title would fail the insert on strict databases, so bound it here.
         $title = \core_text::substr($title, 0, 255);
@@ -183,25 +213,18 @@ class importer {
         $chapter->id = $DB->insert_record('book_chapters', $chapter);
 
         $fs = get_file_storage();
-        foreach ($images as $filename => $mediapath) {
-            $bytes = $package->get_bytes($mediapath);
-            if ($bytes === null || $bytes === '') {
+        foreach ($ready as $filename => $bytes) {
+            if ($fs->file_exists($this->context->id, 'mod_book', 'chapter', $chapter->id, '/', $filename)) {
                 continue;
             }
-            if ($maxdim > 0) {
-                $bytes = self::downscale($bytes, $maxdim);
-            }
-            $filerecord = [
+            $fs->create_file_from_string([
                 'contextid' => $this->context->id,
                 'component' => 'mod_book',
                 'filearea' => 'chapter',
                 'itemid' => $chapter->id,
                 'filepath' => '/',
                 'filename' => $filename,
-            ];
-            if (!$fs->file_exists($this->context->id, 'mod_book', 'chapter', $chapter->id, '/', $filename)) {
-                $fs->create_file_from_string($filerecord, $bytes);
-            }
+            ], $bytes);
         }
 
         $event = \mod_book\event\chapter_created::create([
@@ -211,6 +234,21 @@ class importer {
         $event->add_record_snapshot('book_chapters', $chapter);
         $event->add_record_snapshot('book', $this->book);
         $event->trigger();
+    }
+
+    /**
+     * Removes the <img> tags whose @@PLUGINFILE@@ source is one of the given files.
+     *
+     * @param string $html The chapter HTML.
+     * @param string[] $filenames Filenames whose image could not be prepared.
+     * @return string The HTML with those images removed.
+     */
+    private static function strip_images(string $html, array $filenames): string {
+        foreach ($filenames as $filename) {
+            $pattern = '/<img\b[^>]*@@PLUGINFILE@@\/' . preg_quote($filename, '/') . '[^>]*>/i';
+            $html = preg_replace($pattern, '', $html);
+        }
+        return $html;
     }
 
     /**

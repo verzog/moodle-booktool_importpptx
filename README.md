@@ -32,10 +32,13 @@ present the PDF option simply does not appear — the PowerPoint path is unaffec
   dropped.
 - **Images.** Pictures are saved into the book's own file area and referenced with
   `@@PLUGINFILE@@`. Both standalone pictures and images used as a shape's fill
-  (styled frames and picture placeholders) are recovered. Vector art uses
-  PowerPoint's raster fallback so it renders in a browser. A lone image is centred
+  (styled frames and picture placeholders) are recovered. A lone image is centred
   and height-capped rather than stretched full width, and images can optionally be
   down-scaled on import.
+- **Vector clip-art (WMF/EMF).** Older decks store clip-art as Windows metafiles,
+  which browsers cannot display. When a converter (ImageMagick, LibreOffice or
+  Inkscape) is available on the server these are converted to PNG on import;
+  when none is available they are dropped rather than left as broken images.
 - **Image grids.** Consecutive images become a responsive Bootstrap grid (up to
   three across, two images split 50/50). A run of images preceded by the same
   number of short lines is captioned, each caption above its image.

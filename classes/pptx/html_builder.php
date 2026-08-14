@@ -448,6 +448,9 @@ class html_builder {
         if ($base === '' || $base === null) {
             $base = 'image';
         }
+        // WMF/EMF are vector formats a browser cannot display; the importer
+        // converts them to PNG, so reference the converted name here.
+        $base = preg_replace('/\.(wmf|emf)$/i', '.png', $base);
         $name = $base;
         if (isset($this->images[$name])) {
             $dot = strrpos($base, '.');
