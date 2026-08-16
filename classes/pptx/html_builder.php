@@ -338,7 +338,7 @@ class html_builder {
             return $b->content;
         }
         if ($b->type === block::TYPE_TEXT) {
-            return $this->text_html($b->content);
+            return $this->text_html($b);
         }
         return '';
     }
@@ -357,23 +357,96 @@ class html_builder {
     }
 
     /**
-     * Renders a text block: a list when multi-line, otherwise a paragraph.
+     * Renders a text block. Paragraphs are split into runs of the same bullet
+     * state: a run whose bullets are switched off becomes plain paragraphs, while
+     * a bulleted run becomes a list that nests wherever the slide indented its
+     * bullets — so an intro line above a list stays prose, and an outline keeps
+     * its heading-and-sub-point structure instead of flattening to one flat list.
      *
-     * @param string[] $paras The paragraph HTML strings.
+     * @param block $b The text block.
      * @return string The rendered HTML.
      */
-    private function text_html(array $paras): string {
+    private function text_html(block $b): string {
         $paras = array_map(static function (string $p): string {
             return str_replace("\n", '<br>', $p);
-        }, $paras);
-        if (count($paras) >= 2) {
-            $lis = '';
-            foreach ($paras as $p) {
-                $lis .= '<li>' . $p . '</li>';
-            }
-            return '<ul>' . $lis . '</ul>';
+        }, (array) $b->content);
+        $count = count($paras);
+        if ($count === 0) {
+            return '';
         }
-        return '<p>' . ($paras[0] ?? '') . '</p>';
+        if ($count === 1) {
+            return '<p>' . $paras[0] . '</p>';
+        }
+
+        $html = '';
+        $i = 0;
+        while ($i < $count) {
+            // An empty nobullets entry means "unknown", which reads as bulleted.
+            $isprose = !empty($b->nobullets[$i]);
+            $j = $i;
+            while ($j < $count && !empty($b->nobullets[$j]) === $isprose) {
+                $j++;
+            }
+            if ($isprose) {
+                for ($k = $i; $k < $j; $k++) {
+                    $html .= '<p>' . $paras[$k] . '</p>';
+                }
+            } else {
+                $html .= $this->nested_list(
+                    array_slice($paras, $i, $j - $i),
+                    array_slice($b->levels, $i, $j - $i)
+                );
+            }
+            $i = $j;
+        }
+        return $html;
+    }
+
+    /**
+     * Builds a (possibly nested) unordered list from paragraph HTML and the
+     * per-paragraph indent levels PowerPoint recorded.
+     *
+     * Depths are normalised so the first item sits at the root and each item is
+     * at most one level deeper than the previous: every nested <ul> is therefore
+     * a child of a real <li>, and no level value (however large or out of order)
+     * can produce malformed markup or a runaway loop.
+     *
+     * @param string[] $paras Paragraph HTML strings.
+     * @param int[] $levels Indent level per paragraph, aligned to $paras.
+     * @return string The <ul> HTML.
+     */
+    private function nested_list(array $paras, array $levels): string {
+        $depths = [];
+        $prev = 0;
+        foreach ($paras as $i => $unused) {
+            $level = max(0, (int) ($levels[$i] ?? 0));
+            $depths[$i] = $i === 0 ? 0 : min($level, $prev + 1);
+            $prev = $depths[$i];
+        }
+
+        $html = '';
+        $depth = -1;
+        foreach ($paras as $i => $p) {
+            $target = $depths[$i];
+            if ($target > $depth) {
+                while ($depth < $target) {
+                    $html .= '<ul>';
+                    $depth++;
+                }
+            } else {
+                $html .= '</li>';
+                while ($depth > $target) {
+                    $html .= '</ul></li>';
+                    $depth--;
+                }
+            }
+            $html .= '<li>' . $p;
+        }
+        while ($depth >= 0) {
+            $html .= '</li></ul>';
+            $depth--;
+        }
+        return $html;
     }
 
     /**

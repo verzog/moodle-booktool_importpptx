@@ -56,6 +56,19 @@ class block {
     public $content;
 
     /**
+     * @var int[] Indent level (0-based) for each paragraph of a TYPE_TEXT block,
+     *            aligned to {@see block::$content}. Empty for non-text blocks.
+     */
+    public array $levels = [];
+
+    /**
+     * @var bool[] Whether each paragraph of a TYPE_TEXT block suppresses its bullet,
+     *             aligned to {@see block::$content}. A true entry renders as prose.
+     *             Empty means "unknown", treated as bulleted.
+     */
+    public array $nobullets = [];
+
+    /**
      * Constructor.
      *
      * @param string $type One of the TYPE_* constants.

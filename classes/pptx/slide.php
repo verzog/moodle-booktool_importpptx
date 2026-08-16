@@ -38,6 +38,9 @@ class slide {
     /** @var int Standalone text this short (stripped) is treated as a decorative badge. */
     const BADGE_MAX_CHARS = 4;
 
+    /** @var int Deepest DrawingML outline level (0-8); parsed levels are clamped to it. */
+    const MAX_LIST_LEVEL = 8;
+
     /** @var int Sentinel offset for shapes with no explicit transform (sorts last). */
     const NO_OFFSET = 1000000000000;
 
@@ -219,6 +222,12 @@ class slide {
      * @return void
      */
     private function collect_shape(\DOMElement $sp, \DOMXPath $xpath, array &$out, ?array $tf = null): void {
+        // A footer, slide-number or date placeholder is page furniture repeated on
+        // every slide, not content. Skip it before recovering any fill, so an
+        // image-filled footer is left out as well as its text.
+        if ($this->is_furniture($sp, $xpath)) {
+            return;
+        }
         [$y, $x] = $this->offset($sp, $xpath, $tf);
         // A shape can carry an image as a picture fill rather than as a <p:pic>;
         // recover it for title and ordinary shapes alike (a title placeholder may
@@ -236,10 +245,16 @@ class slide {
             return;
         }
         // Drop a lone, very short label (e.g. a corner "A-T" badge): furniture, not content.
-        if (count($paras) === 1 && \core_text::strlen(trim(strip_tags($paras[0]))) <= self::BADGE_MAX_CHARS) {
+        if (count($paras) === 1 && \core_text::strlen(trim(strip_tags($paras[0]['text']))) <= self::BADGE_MAX_CHARS) {
             return;
         }
-        $out[] = new block(block::TYPE_TEXT, $y, $x, $paras);
+        $block = new block(block::TYPE_TEXT, $y, $x, array_column($paras, 'text'));
+        $block->levels = array_column($paras, 'level');
+        // Whether each paragraph suppresses its bullet is kept per paragraph, so a
+        // box that mixes an intro line with a bulleted list renders the intro as
+        // prose and only the bulleted paragraphs as a list.
+        $block->nobullets = array_column($paras, 'nobullet');
+        $out[] = $block;
     }
 
     /**
@@ -299,14 +314,28 @@ class slide {
     }
 
     /**
-     * Extracts paragraphs from a text shape as escaped HTML fragments.
+     * Whether a shape is a footer, slide-number or date placeholder — page
+     * furniture that repeats on every slide rather than slide content.
+     *
+     * @param \DOMElement $sp The p:sp element.
+     * @param \DOMXPath $xpath Namespaced XPath.
+     * @return bool True for ftr/sldNum/dt placeholders.
+     */
+    private function is_furniture(\DOMElement $sp, \DOMXPath $xpath): bool {
+        $ph = $xpath->query('.//p:nvSpPr/p:nvPr/p:ph', $sp)->item(0);
+        return $ph instanceof \DOMElement && in_array($ph->getAttribute('type'), ['ftr', 'sldNum', 'dt'], true);
+    }
+
+    /**
+     * Extracts paragraphs from a text shape as escaped HTML fragments, keeping
+     * each paragraph's indent level and whether it suppresses its bullet.
      *
      * Each a:p becomes one entry; line breaks (a:br) become "\n" within the
      * entry; bold runs become <strong>. All run text is HTML-escaped.
      *
      * @param \DOMElement $sp The shape element containing a txBody.
      * @param \DOMXPath $xpath Namespaced XPath.
-     * @return string[] Non-empty paragraph fragments in document order.
+     * @return array[] Entries of ['text'=>string, 'level'=>int, 'nobullet'=>bool].
      */
     private function paragraphs(\DOMElement $sp, \DOMXPath $xpath): array {
         $out = [];
@@ -332,9 +361,19 @@ class slide {
                 }
             }
             $line = trim($buf);
-            if ($line !== '') {
-                $out[] = $line;
+            if ($line === '') {
+                continue;
             }
+            $ppr = $xpath->query('a:pPr', $p)->item(0);
+            $level = 0;
+            $nobullet = false;
+            if ($ppr instanceof \DOMElement) {
+                // DrawingML outlines allow levels 0-8; clamp so a crafted lvl (the
+                // uploaded XML is not schema-validated) cannot drive deep nesting.
+                $level = min(self::MAX_LIST_LEVEL, max(0, (int) $ppr->getAttribute('lvl')));
+                $nobullet = $xpath->query('a:buNone', $ppr)->item(0) instanceof \DOMElement;
+            }
+            $out[] = ['text' => $line, 'level' => $level, 'nobullet' => $nobullet];
         }
         return $out;
     }
