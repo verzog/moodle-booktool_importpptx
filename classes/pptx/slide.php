@@ -231,15 +231,27 @@ class slide {
             }
             return;
         }
+        // A footer, slide-number or date placeholder is page furniture repeated on
+        // every slide, not content; skip it so it does not land in the chapter body.
+        if ($this->is_furniture($sp, $xpath)) {
+            return;
+        }
         $paras = $this->paragraphs($sp, $xpath);
         if (empty($paras)) {
             return;
         }
         // Drop a lone, very short label (e.g. a corner "A-T" badge): furniture, not content.
-        if (count($paras) === 1 && \core_text::strlen(trim(strip_tags($paras[0]))) <= self::BADGE_MAX_CHARS) {
+        if (count($paras) === 1 && \core_text::strlen(trim(strip_tags($paras[0]['text']))) <= self::BADGE_MAX_CHARS) {
             return;
         }
-        $out[] = new block(block::TYPE_TEXT, $y, $x, $paras);
+        $block = new block(block::TYPE_TEXT, $y, $x, array_column($paras, 'text'));
+        $block->levels = array_column($paras, 'level');
+        // A list needs at least one paragraph that actually carries a bullet; if
+        // every paragraph suppressed its bullet the box is prose, not a list.
+        $block->bulleted = (bool) array_sum(array_map(static function (array $p): int {
+            return $p['nobullet'] ? 0 : 1;
+        }, $paras));
+        $out[] = $block;
     }
 
     /**
@@ -299,14 +311,28 @@ class slide {
     }
 
     /**
-     * Extracts paragraphs from a text shape as escaped HTML fragments.
+     * Whether a shape is a footer, slide-number or date placeholder — page
+     * furniture that repeats on every slide rather than slide content.
+     *
+     * @param \DOMElement $sp The p:sp element.
+     * @param \DOMXPath $xpath Namespaced XPath.
+     * @return bool True for ftr/sldNum/dt placeholders.
+     */
+    private function is_furniture(\DOMElement $sp, \DOMXPath $xpath): bool {
+        $ph = $xpath->query('.//p:nvSpPr/p:nvPr/p:ph', $sp)->item(0);
+        return $ph instanceof \DOMElement && in_array($ph->getAttribute('type'), ['ftr', 'sldNum', 'dt'], true);
+    }
+
+    /**
+     * Extracts paragraphs from a text shape as escaped HTML fragments, keeping
+     * each paragraph's indent level and whether it suppresses its bullet.
      *
      * Each a:p becomes one entry; line breaks (a:br) become "\n" within the
      * entry; bold runs become <strong>. All run text is HTML-escaped.
      *
      * @param \DOMElement $sp The shape element containing a txBody.
      * @param \DOMXPath $xpath Namespaced XPath.
-     * @return string[] Non-empty paragraph fragments in document order.
+     * @return array[] Entries of ['text'=>string, 'level'=>int, 'nobullet'=>bool].
      */
     private function paragraphs(\DOMElement $sp, \DOMXPath $xpath): array {
         $out = [];
@@ -332,9 +358,17 @@ class slide {
                 }
             }
             $line = trim($buf);
-            if ($line !== '') {
-                $out[] = $line;
+            if ($line === '') {
+                continue;
             }
+            $ppr = $xpath->query('a:pPr', $p)->item(0);
+            $level = 0;
+            $nobullet = false;
+            if ($ppr instanceof \DOMElement) {
+                $level = max(0, (int) $ppr->getAttribute('lvl'));
+                $nobullet = $xpath->query('a:buNone', $ppr)->item(0) instanceof \DOMElement;
+            }
+            $out[] = ['text' => $line, 'level' => $level, 'nobullet' => $nobullet];
         }
         return $out;
     }

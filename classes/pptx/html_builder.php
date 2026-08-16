@@ -338,7 +338,7 @@ class html_builder {
             return $b->content;
         }
         if ($b->type === block::TYPE_TEXT) {
-            return $this->text_html($b->content);
+            return $this->text_html($b);
         }
         return '';
     }
@@ -357,23 +357,82 @@ class html_builder {
     }
 
     /**
-     * Renders a text block: a list when multi-line, otherwise a paragraph.
+     * Renders a text block. A box that suppresses bullets, or holds a single
+     * line, becomes paragraphs; a multi-line bulleted box becomes a list that
+     * nests wherever the slide indented its bullets, so an outline keeps its
+     * heading-and-sub-point structure instead of flattening to one flat list.
      *
-     * @param string[] $paras The paragraph HTML strings.
+     * @param block $b The text block.
      * @return string The rendered HTML.
      */
-    private function text_html(array $paras): string {
+    private function text_html(block $b): string {
         $paras = array_map(static function (string $p): string {
             return str_replace("\n", '<br>', $p);
-        }, $paras);
-        if (count($paras) >= 2) {
-            $lis = '';
-            foreach ($paras as $p) {
-                $lis .= '<li>' . $p . '</li>';
-            }
-            return '<ul>' . $lis . '</ul>';
+        }, (array) $b->content);
+        if ($paras === []) {
+            return '';
         }
-        return '<p>' . ($paras[0] ?? '') . '</p>';
+        // Prose (bullets explicitly off) or a single line reads as paragraphs.
+        if (!$b->bulleted || count($paras) < 2) {
+            $html = '';
+            foreach ($paras as $p) {
+                $html .= '<p>' . $p . '</p>';
+            }
+            return $html;
+        }
+        $levels = $b->levels;
+        return $this->nested_list($paras, $levels);
+    }
+
+    /**
+     * Builds a (possibly nested) unordered list from paragraph HTML and the
+     * per-paragraph indent levels PowerPoint recorded.
+     *
+     * @param string[] $paras Paragraph HTML strings.
+     * @param int[] $levels Indent level per paragraph, aligned to $paras.
+     * @return string The <ul> HTML.
+     */
+    private function nested_list(array $paras, array $levels): string {
+        // Normalise so the shallowest paragraph sits at depth 0, guarding against
+        // decks whose outermost bullets start at a non-zero level.
+        $base = $levels === [] ? 0 : min($levels);
+        $html = '<ul>';
+        $depth = 0;
+        $open = false;
+        foreach ($paras as $i => $p) {
+            $level = max(0, (int) ($levels[$i] ?? 0) - $base);
+            if ($open) {
+                if ($level > $depth) {
+                    // Nest the deeper items inside the item just opened.
+                    $html .= '<ul>';
+                    $depth++;
+                    while ($level > $depth) {
+                        $html .= '<li><ul>';
+                        $depth++;
+                    }
+                } else {
+                    $html .= '</li>';
+                    while ($level < $depth) {
+                        $html .= '</ul></li>';
+                        $depth--;
+                    }
+                }
+            } else {
+                // First item may itself be deeper than the list root.
+                while ($level > $depth) {
+                    $html .= '<ul>';
+                    $depth++;
+                }
+            }
+            $html .= '<li>' . $p;
+            $open = true;
+        }
+        $html .= '</li>';
+        while ($depth > 0) {
+            $html .= '</ul></li>';
+            $depth--;
+        }
+        return $html . '</ul>';
     }
 
     /**

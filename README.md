@@ -33,9 +33,12 @@ Neither affects the core PowerPoint text/image path, which stays pure PHP.
   rows and left-to-right within a row. When a row holds several blocks side by
   side — text beside an image, or two/three columns — they become even Bootstrap
   columns that keep the arrangement on desktop and stack on mobile.
-- **Text.** Paragraphs become `<p>`; multi-line text boxes become `<ul>`; bold
-  runs and line breaks are preserved; decorative one- or two-character badges are
-  dropped.
+- **Text.** A bulleted text box becomes a list that **keeps its outline**: indented
+  bullets nest under their parent, so a heading with sub-points stays a heading with
+  sub-points instead of flattening to one long flat list. A text box that switches
+  bullets off becomes plain `<p>` paragraphs. Bold runs and line breaks are preserved;
+  decorative one- or two-character badges, and footer / slide-number / date
+  placeholders, are dropped as page furniture.
 - **Images.** Pictures are saved into the book's own file area and referenced with
   `@@PLUGINFILE@@`. Both standalone pictures and images used as a shape's fill
   (styled frames and picture placeholders) are recovered. A lone image is centred

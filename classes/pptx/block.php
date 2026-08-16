@@ -56,6 +56,18 @@ class block {
     public $content;
 
     /**
+     * @var int[] Indent level (0-based) for each paragraph of a TYPE_TEXT block,
+     *            aligned to {@see block::$content}. Empty for non-text blocks.
+     */
+    public array $levels = [];
+
+    /**
+     * @var bool Whether a TYPE_TEXT block reads as a bulleted list. False when the
+     *           text box explicitly suppresses bullets, so it renders as paragraphs.
+     */
+    public bool $bulleted = true;
+
+    /**
      * Constructor.
      *
      * @param string $type One of the TYPE_* constants.

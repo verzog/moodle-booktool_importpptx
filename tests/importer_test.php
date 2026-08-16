@@ -185,6 +185,77 @@ final class importer_test extends \advanced_testcase {
     }
 
     /**
+     * A bulleted box keeps its outline: indented paragraphs nest under their parent
+     * bullet instead of flattening into one flat list.
+     */
+    public function test_nested_list_from_indent_levels(): void {
+        $builder = new html_builder('#442980');
+        $text = new block(block::TYPE_TEXT, 2000000, 1000000, [
+            'Always consider culture.',
+            'Language Barriers',
+            'Patients may be confused.',
+            'Brain injuries',
+            'Bring a support person.',
+        ]);
+        $text->levels = [0, 0, 1, 0, 1];
+        $parsed = (object) ['title' => 'Body', 'section' => null, 'blocks' => [$text]];
+        $out = $builder->build($parsed);
+        // The heading bullet owns the indented point that follows it.
+        $this->assertStringContainsString(
+            '<li>Language Barriers<ul><li>Patients may be confused.</li></ul></li>',
+            $out->html
+        );
+        $this->assertStringContainsString(
+            '<li>Brain injuries<ul><li>Bring a support person.</li></ul></li>',
+            $out->html
+        );
+    }
+
+    /**
+     * A text box that switches bullets off renders as paragraphs, not a bullet list.
+     */
+    public function test_unbulleted_text_renders_as_paragraphs(): void {
+        $builder = new html_builder('#442980');
+        $text = new block(block::TYPE_TEXT, 2000000, 1000000, [
+            'First sentence of prose.',
+            'Second sentence of prose.',
+        ]);
+        $text->levels = [0, 0];
+        $text->bulleted = false;
+        $parsed = (object) ['title' => 'Prose', 'section' => null, 'blocks' => [$text]];
+        $out = $builder->build($parsed);
+        $this->assertStringContainsString('<p>First sentence of prose.</p>', $out->html);
+        $this->assertStringContainsString('<p>Second sentence of prose.</p>', $out->html);
+        $this->assertStringNotContainsString('<ul>', $out->html);
+    }
+
+    /**
+     * A footer placeholder is page furniture and is kept out of the chapter body,
+     * while the body placeholder's indent levels drive nesting.
+     */
+    public function test_footer_dropped_and_levels_parsed_from_slide(): void {
+        $body = '<p:sp><p:nvSpPr><p:cNvPr id="2" name="Body"/><p:cNvSpPr/>'
+            . '<p:nvPr><p:ph type="body"/></p:nvPr></p:nvSpPr>'
+            . '<p:spPr><a:xfrm><a:off x="838200" y="1825625"/><a:ext cx="10515600" cy="4351338"/></a:xfrm></p:spPr>'
+            . '<p:txBody><a:bodyPr/>'
+            . '<a:p><a:r><a:t>Language Barriers</a:t></a:r></a:p>'
+            . '<a:p><a:pPr lvl="1"/><a:r><a:t>Patients may be confused.</a:t></a:r></a:p>'
+            . '</p:txBody></p:sp>';
+        $footer = '<p:sp><p:nvSpPr><p:cNvPr id="3" name="Footer"/><p:cNvSpPr/>'
+            . '<p:nvPr><p:ph type="ftr"/></p:nvPr></p:nvSpPr>'
+            . '<p:spPr><a:xfrm><a:off x="838200" y="6356350"/><a:ext cx="2419350" cy="365125"/></a:xfrm></p:spPr>'
+            . '<p:txBody><a:bodyPr/><a:p><a:r><a:t>MC 10 - Cultural Awareness - PPT 1</a:t></a:r></a:p>'
+            . '</p:txBody></p:sp>';
+
+        $chapter = $this->build_slide($body . $footer);
+        $this->assertStringNotContainsString('MC 10', $chapter->html);
+        $this->assertStringContainsString(
+            '<li>Language Barriers<ul><li>Patients may be confused.</li></ul></li>',
+            $chapter->html
+        );
+    }
+
+    /**
      * WMF/EMF vector images are referenced as PNG (the importer converts them).
      */
     public function test_wmf_image_referenced_as_png(): void {
@@ -258,6 +329,53 @@ final class importer_test extends \advanced_testcase {
         $placeable = pack('V', 0x9AC6CDD7) . pack('v', 0) . pack('vvvv', 0, 0, 2, 2)
             . pack('v', 96) . pack('V', 0) . pack('v', 0);
         return $placeable . $std . $stretch . $eof;
+    }
+
+    /**
+     * Builds a one-slide deck whose slide shape tree is the given XML, then parses
+     * and builds that slide into a chapter (no database needed).
+     *
+     * @param string $sptree The inner XML of the slide's p:spTree.
+     * @return \stdClass The built chapter object.
+     */
+    private function build_slide(string $sptree): \stdClass {
+        $nsp = package::NS_P;
+        $nsa = package::NS_A;
+        $nsr = package::NS_R;
+        $nspr = package::NS_PR;
+
+        $dir = make_request_directory();
+        $path = $dir . '/one.pptx';
+        $zip = new \ZipArchive();
+        $zip->open($path, \ZipArchive::CREATE);
+        $zip->addFromString(
+            '[Content_Types].xml',
+            '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>'
+        );
+        $zip->addFromString(
+            'ppt/presentation.xml',
+            '<?xml version="1.0"?><p:presentation xmlns:p="' . $nsp . '" xmlns:r="' . $nsr . '">'
+                . '<p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst>'
+                . '<p:sldSz cx="12192000" cy="6858000"/></p:presentation>'
+        );
+        $zip->addFromString(
+            'ppt/_rels/presentation.xml.rels',
+            '<?xml version="1.0"?><Relationships xmlns="' . $nspr . '">'
+                . '<Relationship Id="rId1" Type="http://x/slide" Target="slides/slide1.xml"/></Relationships>'
+        );
+        $zip->addFromString(
+            'ppt/slides/slide1.xml',
+            '<?xml version="1.0"?><p:sld xmlns:p="' . $nsp . '" xmlns:a="' . $nsa . '" xmlns:r="' . $nsr . '">'
+                . '<p:cSld><p:spTree>' . $sptree . '</p:spTree></p:cSld></p:sld>'
+        );
+        $zip->close();
+
+        $package = new package($path);
+        $builder = new html_builder('#442980');
+        $paths = $package->get_slide_paths();
+        $chapter = $builder->build((new slide($package, $paths[0]))->parse());
+        $package->close();
+        return $chapter;
     }
 
     /**
