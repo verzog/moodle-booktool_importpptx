@@ -38,6 +38,9 @@ class slide {
     /** @var int Standalone text this short (stripped) is treated as a decorative badge. */
     const BADGE_MAX_CHARS = 4;
 
+    /** @var int Deepest DrawingML outline level (0-8); parsed levels are clamped to it. */
+    const MAX_LIST_LEVEL = 8;
+
     /** @var int Sentinel offset for shapes with no explicit transform (sorts last). */
     const NO_OFFSET = 1000000000000;
 
@@ -219,6 +222,12 @@ class slide {
      * @return void
      */
     private function collect_shape(\DOMElement $sp, \DOMXPath $xpath, array &$out, ?array $tf = null): void {
+        // A footer, slide-number or date placeholder is page furniture repeated on
+        // every slide, not content. Skip it before recovering any fill, so an
+        // image-filled footer is left out as well as its text.
+        if ($this->is_furniture($sp, $xpath)) {
+            return;
+        }
         [$y, $x] = $this->offset($sp, $xpath, $tf);
         // A shape can carry an image as a picture fill rather than as a <p:pic>;
         // recover it for title and ordinary shapes alike (a title placeholder may
@@ -231,11 +240,6 @@ class slide {
             }
             return;
         }
-        // A footer, slide-number or date placeholder is page furniture repeated on
-        // every slide, not content; skip it so it does not land in the chapter body.
-        if ($this->is_furniture($sp, $xpath)) {
-            return;
-        }
         $paras = $this->paragraphs($sp, $xpath);
         if (empty($paras)) {
             return;
@@ -246,11 +250,10 @@ class slide {
         }
         $block = new block(block::TYPE_TEXT, $y, $x, array_column($paras, 'text'));
         $block->levels = array_column($paras, 'level');
-        // A list needs at least one paragraph that actually carries a bullet; if
-        // every paragraph suppressed its bullet the box is prose, not a list.
-        $block->bulleted = (bool) array_sum(array_map(static function (array $p): int {
-            return $p['nobullet'] ? 0 : 1;
-        }, $paras));
+        // Whether each paragraph suppresses its bullet is kept per paragraph, so a
+        // box that mixes an intro line with a bulleted list renders the intro as
+        // prose and only the bulleted paragraphs as a list.
+        $block->nobullets = array_column($paras, 'nobullet');
         $out[] = $block;
     }
 
@@ -365,7 +368,9 @@ class slide {
             $level = 0;
             $nobullet = false;
             if ($ppr instanceof \DOMElement) {
-                $level = max(0, (int) $ppr->getAttribute('lvl'));
+                // DrawingML outlines allow levels 0-8; clamp so a crafted lvl (the
+                // uploaded XML is not schema-validated) cannot drive deep nesting.
+                $level = min(self::MAX_LIST_LEVEL, max(0, (int) $ppr->getAttribute('lvl')));
                 $nobullet = $xpath->query('a:buNone', $ppr)->item(0) instanceof \DOMElement;
             }
             $out[] = ['text' => $line, 'level' => $level, 'nobullet' => $nobullet];

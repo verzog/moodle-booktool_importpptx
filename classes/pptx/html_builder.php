@@ -357,10 +357,11 @@ class html_builder {
     }
 
     /**
-     * Renders a text block. A box that suppresses bullets, or holds a single
-     * line, becomes paragraphs; a multi-line bulleted box becomes a list that
-     * nests wherever the slide indented its bullets, so an outline keeps its
-     * heading-and-sub-point structure instead of flattening to one flat list.
+     * Renders a text block. Paragraphs are split into runs of the same bullet
+     * state: a run whose bullets are switched off becomes plain paragraphs, while
+     * a bulleted run becomes a list that nests wherever the slide indented its
+     * bullets — so an intro line above a list stays prose, and an outline keeps
+     * its heading-and-sub-point structure instead of flattening to one flat list.
      *
      * @param block $b The text block.
      * @return string The rendered HTML.
@@ -369,70 +370,83 @@ class html_builder {
         $paras = array_map(static function (string $p): string {
             return str_replace("\n", '<br>', $p);
         }, (array) $b->content);
-        if ($paras === []) {
+        $count = count($paras);
+        if ($count === 0) {
             return '';
         }
-        // Prose (bullets explicitly off) or a single line reads as paragraphs.
-        if (!$b->bulleted || count($paras) < 2) {
-            $html = '';
-            foreach ($paras as $p) {
-                $html .= '<p>' . $p . '</p>';
-            }
-            return $html;
+        if ($count === 1) {
+            return '<p>' . $paras[0] . '</p>';
         }
-        $levels = $b->levels;
-        return $this->nested_list($paras, $levels);
+
+        $html = '';
+        $i = 0;
+        while ($i < $count) {
+            // An empty nobullets entry means "unknown", which reads as bulleted.
+            $isprose = !empty($b->nobullets[$i]);
+            $j = $i;
+            while ($j < $count && !empty($b->nobullets[$j]) === $isprose) {
+                $j++;
+            }
+            if ($isprose) {
+                for ($k = $i; $k < $j; $k++) {
+                    $html .= '<p>' . $paras[$k] . '</p>';
+                }
+            } else {
+                $html .= $this->nested_list(
+                    array_slice($paras, $i, $j - $i),
+                    array_slice($b->levels, $i, $j - $i)
+                );
+            }
+            $i = $j;
+        }
+        return $html;
     }
 
     /**
      * Builds a (possibly nested) unordered list from paragraph HTML and the
      * per-paragraph indent levels PowerPoint recorded.
      *
+     * Depths are normalised so the first item sits at the root and each item is
+     * at most one level deeper than the previous: every nested <ul> is therefore
+     * a child of a real <li>, and no level value (however large or out of order)
+     * can produce malformed markup or a runaway loop.
+     *
      * @param string[] $paras Paragraph HTML strings.
      * @param int[] $levels Indent level per paragraph, aligned to $paras.
      * @return string The <ul> HTML.
      */
     private function nested_list(array $paras, array $levels): string {
-        // Normalise so the shallowest paragraph sits at depth 0, guarding against
-        // decks whose outermost bullets start at a non-zero level.
-        $base = $levels === [] ? 0 : min($levels);
-        $html = '<ul>';
-        $depth = 0;
-        $open = false;
+        $depths = [];
+        $prev = 0;
+        foreach ($paras as $i => $unused) {
+            $level = max(0, (int) ($levels[$i] ?? 0));
+            $depths[$i] = $i === 0 ? 0 : min($level, $prev + 1);
+            $prev = $depths[$i];
+        }
+
+        $html = '';
+        $depth = -1;
         foreach ($paras as $i => $p) {
-            $level = max(0, (int) ($levels[$i] ?? 0) - $base);
-            if ($open) {
-                if ($level > $depth) {
-                    // Nest the deeper items inside the item just opened.
+            $target = $depths[$i];
+            if ($target > $depth) {
+                while ($depth < $target) {
                     $html .= '<ul>';
                     $depth++;
-                    while ($level > $depth) {
-                        $html .= '<li><ul>';
-                        $depth++;
-                    }
-                } else {
-                    $html .= '</li>';
-                    while ($level < $depth) {
-                        $html .= '</ul></li>';
-                        $depth--;
-                    }
                 }
             } else {
-                // First item may itself be deeper than the list root.
-                while ($level > $depth) {
-                    $html .= '<ul>';
-                    $depth++;
+                $html .= '</li>';
+                while ($depth > $target) {
+                    $html .= '</ul></li>';
+                    $depth--;
                 }
             }
             $html .= '<li>' . $p;
-            $open = true;
         }
-        $html .= '</li>';
-        while ($depth > 0) {
-            $html .= '</ul></li>';
+        while ($depth >= 0) {
+            $html .= '</li></ul>';
             $depth--;
         }
-        return $html . '</ul>';
+        return $html;
     }
 
     /**

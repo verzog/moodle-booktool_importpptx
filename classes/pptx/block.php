@@ -62,10 +62,11 @@ class block {
     public array $levels = [];
 
     /**
-     * @var bool Whether a TYPE_TEXT block reads as a bulleted list. False when the
-     *           text box explicitly suppresses bullets, so it renders as paragraphs.
+     * @var bool[] Whether each paragraph of a TYPE_TEXT block suppresses its bullet,
+     *             aligned to {@see block::$content}. A true entry renders as prose.
+     *             Empty means "unknown", treated as bulleted.
      */
-    public bool $bulleted = true;
+    public array $nobullets = [];
 
     /**
      * Constructor.

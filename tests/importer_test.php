@@ -221,12 +221,59 @@ final class importer_test extends \advanced_testcase {
             'Second sentence of prose.',
         ]);
         $text->levels = [0, 0];
-        $text->bulleted = false;
+        $text->nobullets = [true, true];
         $parsed = (object) ['title' => 'Prose', 'section' => null, 'blocks' => [$text]];
         $out = $builder->build($parsed);
         $this->assertStringContainsString('<p>First sentence of prose.</p>', $out->html);
         $this->assertStringContainsString('<p>Second sentence of prose.</p>', $out->html);
         $this->assertStringNotContainsString('<ul>', $out->html);
+    }
+
+    /**
+     * A box mixing an unbulleted intro line with a bulleted list renders the intro
+     * as prose and only the bulleted paragraphs as a list.
+     */
+    public function test_mixed_prose_and_bullets_split(): void {
+        $builder = new html_builder('#442980');
+        $text = new block(block::TYPE_TEXT, 2000000, 1000000, [
+            'Here is the introduction.',
+            'First bullet point.',
+            'Second bullet point.',
+        ]);
+        $text->levels = [0, 0, 0];
+        $text->nobullets = [true, false, false];
+        $parsed = (object) ['title' => 'Mixed', 'section' => null, 'blocks' => [$text]];
+        $out = $builder->build($parsed);
+        $this->assertStringContainsString('<p>Here is the introduction.</p>', $out->html);
+        $this->assertStringContainsString(
+            '<ul><li>First bullet point.</li><li>Second bullet point.</li></ul>',
+            $out->html
+        );
+        // The intro is not swallowed into the list.
+        $this->assertStringNotContainsString('<li>Here is the introduction.', $out->html);
+    }
+
+    /**
+     * A list that starts deeper than a later item still yields well-formed markup:
+     * levels are normalised so no bare <ul> sits inside the root without an <li>.
+     */
+    public function test_nested_list_normalises_disordered_levels(): void {
+        $builder = new html_builder('#442980');
+        $text = new block(block::TYPE_TEXT, 2000000, 1000000, ['Indented first.', 'Shallower second.']);
+        $text->levels = [1, 0];
+        $parsed = (object) ['title' => 'Odd', 'section' => null, 'blocks' => [$text]];
+        $out = $builder->build($parsed);
+        // Well-formed: DOMDocument parses it without repair changing the structure.
+        $doc = new \DOMDocument();
+        $prev = libxml_use_internal_errors(true);
+        $doc->loadHTML('<?xml encoding="utf-8"?><body>' . $out->html . '</body>');
+        libxml_clear_errors();
+        libxml_use_internal_errors($prev);
+        // No <ul> is a direct child of another <ul> (which browsers would repair).
+        $xpath = new \DOMXPath($doc);
+        $this->assertSame(0, $xpath->query('//ul/ul')->length);
+        $this->assertStringContainsString('Indented first.', $out->html);
+        $this->assertStringContainsString('Shallower second.', $out->html);
     }
 
     /**
@@ -253,6 +300,27 @@ final class importer_test extends \advanced_testcase {
             '<li>Language Barriers<ul><li>Patients may be confused.</li></ul></li>',
             $chapter->html
         );
+    }
+
+    /**
+     * A footer placeholder with an image fill (branded template) is skipped whole:
+     * its repeated picture is not imported either.
+     */
+    public function test_image_filled_footer_is_dropped(): void {
+        $footer = '<p:sp><p:nvSpPr><p:cNvPr id="3" name="Footer"/><p:cNvSpPr/>'
+            . '<p:nvPr><p:ph type="ftr"/></p:nvPr></p:nvSpPr>'
+            . '<p:spPr><a:xfrm><a:off x="838200" y="6356350"/><a:ext cx="2419350" cy="365125"/></a:xfrm>'
+            . '<a:blipFill><a:blip r:embed="rId5"/></a:blipFill></p:spPr>'
+            . '<p:txBody><a:bodyPr/><a:p><a:r><a:t>Brand strip</a:t></a:r></a:p></p:txBody></p:sp>';
+
+        $chapter = $this->build_slide(
+            $footer,
+            ['rId5' => '../media/brand.png'],
+            ['ppt/media/brand.png' => 'PNGDATA']
+        );
+        $this->assertStringNotContainsString('<img', $chapter->html);
+        $this->assertStringNotContainsString('Brand strip', $chapter->html);
+        $this->assertSame([], $chapter->images);
     }
 
     /**
@@ -336,9 +404,11 @@ final class importer_test extends \advanced_testcase {
      * and builds that slide into a chapter (no database needed).
      *
      * @param string $sptree The inner XML of the slide's p:spTree.
+     * @param array $rels Optional slide relationships: id => Target (e.g. ['rId5' => '../media/image1.png']).
+     * @param array $media Optional media parts: zip path => bytes.
      * @return \stdClass The built chapter object.
      */
-    private function build_slide(string $sptree): \stdClass {
+    private function build_slide(string $sptree, array $rels = [], array $media = []): \stdClass {
         $nsp = package::NS_P;
         $nsa = package::NS_A;
         $nsr = package::NS_R;
@@ -368,6 +438,19 @@ final class importer_test extends \advanced_testcase {
             '<?xml version="1.0"?><p:sld xmlns:p="' . $nsp . '" xmlns:a="' . $nsa . '" xmlns:r="' . $nsr . '">'
                 . '<p:cSld><p:spTree>' . $sptree . '</p:spTree></p:cSld></p:sld>'
         );
+        if ($rels !== []) {
+            $entries = '';
+            foreach ($rels as $id => $target) {
+                $entries .= '<Relationship Id="' . $id . '" Type="http://x/image" Target="' . $target . '"/>';
+            }
+            $zip->addFromString(
+                'ppt/slides/_rels/slide1.xml.rels',
+                '<?xml version="1.0"?><Relationships xmlns="' . $nspr . '">' . $entries . '</Relationships>'
+            );
+        }
+        foreach ($media as $mpath => $bytes) {
+            $zip->addFromString($mpath, $bytes);
+        }
         $zip->close();
 
         $package = new package($path);
