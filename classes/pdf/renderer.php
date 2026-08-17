@@ -92,7 +92,22 @@ class renderer {
         $dir = make_request_directory();
         $path = $dir . '/import.pdf';
         $pdf->copy_content_to($path);
-        $prefix = $dir . '/page';
+        yield from $this->render_path($path, $maxdim);
+    }
+
+    /**
+     * Renders each page of a PDF already staged on disk to a web-friendly image.
+     *
+     * Shared by the PowerPoint-to-image (LibreOffice) backend, which converts a
+     * .pptx to a PDF and then reuses this loop.
+     *
+     * @param string $path Absolute path to a PDF file on disk.
+     * @param int $maxdim Maximum image dimension in px (0 keeps the rendered size).
+     * @return \Generator Yields [pagenumber, filename, bytes] arrays.
+     * @throws \moodle_exception If rendering fails.
+     */
+    public function render_path(string $path, int $maxdim): \Generator {
+        $prefix = dirname($path) . '/page';
 
         $result = self::run([self::binary('pdftoppm'), '-png', '-r', (string) self::DPI, $path, $prefix]);
         if ($result['code'] !== 0) {

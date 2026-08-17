@@ -51,6 +51,20 @@ class import_form extends \moodleform {
         $mform->addRule('pptxfile', null, 'required', null, 'client');
         $mform->addHelpButton('pptxfile', $labelkey, 'booktool_importpptx');
 
+        // How to import: editable HTML, or faithful slide images (LibreOffice).
+        // The image mode is only offered when the render backend is available.
+        if (!empty($this->_customdata['officeenabled'])) {
+            $mform->addElement('select', 'importmode', get_string('optionimportmode', 'booktool_importpptx'), [
+                'editable' => get_string('importmodeeditable', 'booktool_importpptx'),
+                'images' => get_string('importmodeimages', 'booktool_importpptx'),
+            ]);
+            $mform->setDefault('importmode', 'editable');
+            $mform->addHelpButton('importmode', 'optionimportmode', 'booktool_importpptx');
+        } else {
+            $mform->addElement('hidden', 'importmode', 'editable');
+        }
+        $mform->setType('importmode', PARAM_ALPHA);
+
         // Advanced, per-import options (booktool subplugins cannot expose site
         // admin settings, so the tunables live on the import form instead).
         $mform->addElement('text', 'imagemaxdim', get_string('optionimagemaxdim', 'booktool_importpptx'));

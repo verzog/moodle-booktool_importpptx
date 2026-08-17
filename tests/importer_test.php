@@ -742,6 +742,84 @@ final class importer_test extends \advanced_testcase {
     }
 
     /**
+     * The importer chosen for an upload follows the file type and the import mode,
+     * and the image mode degrades safely to the editable importer when the
+     * LibreOffice render backend is unavailable.
+     */
+    public function test_importer_selection(): void {
+        global $CFG, $DB;
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        require_once($CFG->dirroot . '/mod/book/tool/importpptx/locallib.php');
+
+        $course = $this->getDataGenerator()->create_course();
+        $book = $this->getDataGenerator()->create_module('book', ['course' => $course->id]);
+        $context = \context_module::instance($book->cmid);
+        $record = $DB->get_record('book', ['id' => $book->id], '*', MUST_EXIST);
+
+        $pptx = $this->make_named_file('deck.pptx', 'x');
+        $pdf = $this->make_named_file('doc.pdf', '%PDF-1.4');
+
+        $this->assertInstanceOf(
+            \booktool_importpptx\importer::class,
+            booktool_importpptx_importer($pptx, $record, $context, ['importmode' => 'editable'])
+        );
+        $this->assertInstanceOf(
+            \booktool_importpptx\pdf_importer::class,
+            booktool_importpptx_importer($pdf, $record, $context, ['importmode' => 'editable'])
+        );
+        // With no LibreOffice on the test host, "images" mode falls back to editable.
+        if (!\booktool_importpptx\office\renderer::is_available()) {
+            $this->assertInstanceOf(
+                \booktool_importpptx\importer::class,
+                booktool_importpptx_importer($pptx, $record, $context, ['importmode' => 'images'])
+            );
+        }
+    }
+
+    /**
+     * The image import backend creates one image chapter per rendered slide.
+     */
+    public function test_office_importer_creates_image_chapters(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $course = $this->getDataGenerator()->create_course();
+        $book = $this->getDataGenerator()->create_module('book', ['course' => $course->id]);
+        $context = \context_module::instance($book->cmid);
+        $record = $DB->get_record('book', ['id' => $book->id], '*', MUST_EXIST);
+
+        // A stub renderer stands in for LibreOffice + poppler, yielding fixed pages.
+        $renderer = new class extends \booktool_importpptx\office\renderer {
+            public function render_pages(\stored_file $pptx, int $maxdim): \Generator {
+                yield [1, 'page-1.png', 'PNGONE'];
+                yield [2, 'page-2.png', 'PNGTWO'];
+            }
+        };
+        $file = $this->make_named_file('deck.pptx', 'x', $record->id, $context);
+        $importer = new \booktool_importpptx\office_importer($record, $context, ['imagemaxdim' => 0], $renderer);
+        $this->assertSame(2, $importer->import($file));
+
+        $chapters = array_values($DB->get_records(
+            'book_chapters',
+            ['bookid' => $record->id, 'importsrc' => 'deck.pptx'],
+            'pagenum ASC'
+        ));
+        $this->assertCount(2, $chapters);
+        $this->assertStringContainsString('@@PLUGINFILE@@/page-1.png', $chapters[0]->content);
+        $fs = get_file_storage();
+        $this->assertTrue($fs->file_exists(
+            $context->id,
+            'mod_book',
+            'chapter',
+            $chapters[0]->id,
+            '/',
+            'page-1.png'
+        ));
+    }
+
+    /**
      * When poppler is available, a PDF imports one image chapter per page.
      */
     public function test_pdf_import(): void {

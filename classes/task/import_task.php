@@ -24,10 +24,8 @@
 
 namespace booktool_importpptx\task;
 
-use booktool_importpptx\importer;
-
 /**
- * Runs {@see importer::import()} for presentations above the async threshold.
+ * Runs the chosen importer for presentations above the async threshold.
  */
 class import_task extends \core\task\adhoc_task {
     /**
@@ -45,7 +43,7 @@ class import_task extends \core\task\adhoc_task {
      * @return void
      */
     public function execute(): void {
-        global $DB;
+        global $DB, $CFG;
 
         $data = $this->get_custom_data();
         if (empty($data->cmid) || empty($data->fileitemid)) {
@@ -71,15 +69,13 @@ class import_task extends \core\task\adhoc_task {
         $options = [
             'imagemaxdim' => (int) ($data->imagemaxdim ?? 1600),
             'sectioncolour' => (string) ($data->sectioncolour ?? '#442980'),
+            'importmode' => (string) ($data->importmode ?? 'editable'),
         ];
 
         // Do not delete the staged upload in a finally: if the import throws on a
         // transient error, Moodle retries the adhoc task and needs the input intact.
-        if (($data->type ?? 'pptx') === 'pdf') {
-            $importer = new \booktool_importpptx\pdf_importer($book, $context, $options);
-        } else {
-            $importer = new importer($book, $context, $options);
-        }
+        require_once($CFG->dirroot . '/mod/book/tool/importpptx/locallib.php');
+        $importer = booktool_importpptx_importer($file, $book, $context, $options);
         $count = $importer->import($file);
         mtrace("booktool_importpptx: imported {$count} chapters into book {$book->id}.");
         \booktool_importpptx\pending_file::delete($context, $itemid);
