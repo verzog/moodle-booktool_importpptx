@@ -52,7 +52,7 @@ function booktool_importpptx_process(
     // (overridable via forced_plugin_settings / the CLI if a site needs to).
     $threshold = get_config('booktool_importpptx', 'asyncthreshold');
     $threshold = ($threshold === false || $threshold === '') ? 30 : (int) $threshold;
-    $count = booktool_importpptx_count($file);
+    $count = booktool_importpptx_count($file, $options);
 
     if ($count > $threshold) {
         $task = new \booktool_importpptx\task\import_task();
@@ -114,12 +114,22 @@ function booktool_importpptx_type(stored_file $file): string {
 /**
  * Counts the units (slides or pages) an upload will produce, per backend.
  *
+ * Counting mirrors the importer routing: a PDF is counted by page, an image-mode
+ * PowerPoint by its raw slide parts (so a Strict OOXML deck bound for LibreOffice
+ * is not blocked by the editable parser), and everything else by the editable
+ * parser's slide count.
+ *
  * @param stored_file $file The uploaded file.
+ * @param array $options Import options (including 'importmode').
  * @return int The number of chapters the import will create.
  */
-function booktool_importpptx_count(stored_file $file): int {
+function booktool_importpptx_count(stored_file $file, array $options = []): int {
     if (booktool_importpptx_type($file) === 'pdf') {
         return \booktool_importpptx\pdf_importer::count_pages($file);
+    }
+    $mode = (string) ($options['importmode'] ?? 'editable');
+    if ($mode === 'images' && \booktool_importpptx\office\renderer::is_available()) {
+        return \booktool_importpptx\office_importer::count_slides($file);
     }
     return \booktool_importpptx\importer::count_slides($file);
 }

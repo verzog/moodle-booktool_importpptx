@@ -129,7 +129,9 @@ if ($data = $mform->get_data()) {
     }
 
     try {
-        $count = booktool_importpptx_count($file);
+        $count = booktool_importpptx_count($file, [
+            'importmode' => (string) ($data->importmode ?? 'editable'),
+        ]);
     } catch (\moodle_exception $e) {
         \booktool_importpptx\pending_file::delete($context, $pendingid);
         redirect($PAGE->url, $e->getMessage(), null, \core\output\notification::NOTIFY_ERROR);

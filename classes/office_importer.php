@@ -61,6 +61,41 @@ class office_importer {
     }
 
     /**
+     * Counts the slides in a presentation for the image backend.
+     *
+     * The whole-deck image path does not use the transitional-OOXML parser, so a
+     * deck that parser rejects (for example Strict Open XML) can still be
+     * rendered by LibreOffice. Counting its slide parts straight from the archive
+     * keeps the confirmation count and async threshold working for those decks,
+     * instead of failing them at the counting step the editable path uses.
+     *
+     * @param \stored_file $pptx The uploaded presentation.
+     * @return int The number of slide parts in the package.
+     * @throws \moodle_exception If the file is not a readable .pptx package.
+     */
+    public static function count_slides(\stored_file $pptx): int {
+        $dir = make_request_directory();
+        $path = $dir . '/count.pptx';
+        $pptx->copy_content_to($path);
+        $zip = new \ZipArchive();
+        if ($zip->open($path) !== true) {
+            throw new \moodle_exception('errornopptx', 'booktool_importpptx');
+        }
+        try {
+            $count = 0;
+            for ($i = 0; $i < $zip->numFiles; $i++) {
+                $name = $zip->getNameIndex($i);
+                if ($name !== false && preg_match('#^ppt/slides/slide\d+\.xml$#', $name)) {
+                    $count++;
+                }
+            }
+            return $count;
+        } finally {
+            $zip->close();
+        }
+    }
+
+    /**
      * Imports the presentation, creating one image chapter per slide.
      *
      * @param \stored_file $pptx The uploaded presentation.
@@ -79,7 +114,7 @@ class office_importer {
         $created = 0;
         foreach ($renderer->render_pages($pptx, $this->imagemaxdim) as [$page, $filename, $bytes]) {
             $title = get_string('slidetitle', 'booktool_importpptx', $page);
-            $html = '<img src="@@PLUGINFILE@@/' . $filename . '" alt="" class="img-fluid">';
+            $html = '<img src="@@PLUGINFILE@@/' . $filename . '" alt="' . s($title) . '" class="img-fluid">';
             $pagenum++;
             chapter_writer::write(
                 $this->book,
