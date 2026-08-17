@@ -38,21 +38,15 @@ function booktool_importpptx_extend_settings_navigation(
 ) {
     global $PAGE;
 
-    // The course module can come from either the navigation's own page or the
-    // global page, depending on how the settings navigation was built. Read from
-    // whichever is populated so the action shows in every book context.
-    $cm = null;
-    if (!empty($settingsnav->get_page()->cm)) {
-        $cm = $settingsnav->get_page()->cm;
-    } else if (!empty($PAGE->cm)) {
-        $cm = $PAGE->cm;
-    }
-    if (empty($cm) || $cm->modname !== 'book') {
-        return;
-    }
-
-    $context = !empty($cm->context) ? $cm->context : context_module::instance($cm->id);
-    if (!has_capability('booktool/importpptx:import', $context)) {
+    // Read the course module directly, exactly as core booktool_importhtml does.
+    // The page object exposes cm through a magic getter, so probing it with
+    // empty()/isset() can report "not set" even when a direct read returns the
+    // module (observed live: the guard saw null while importhtml, in the same
+    // callback loop, used $PAGE->cm successfully). Assign first, then test the
+    // local variable, so no magic-property semantics are involved. mod_book only
+    // invokes booktool callbacks for its own pages, so no modname check is needed.
+    $cm = $PAGE->cm;
+    if (!$cm || !has_capability('booktool/importpptx:import', $cm->context)) {
         return;
     }
 
