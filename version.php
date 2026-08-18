@@ -25,10 +25,10 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'booktool_importpptx';
-$plugin->version   = 2026081900;
+$plugin->version   = 2026081901;
 $plugin->requires  = 2025041400;
 $plugin->maturity  = MATURITY_STABLE;
-$plugin->release   = '1.9.0';
+$plugin->release   = '1.9.1';
 $plugin->dependencies = [
     'mod_book' => ANY_VERSION,
 ];
