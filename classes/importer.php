@@ -44,12 +44,16 @@ class importer {
     /** @var int Maximum image dimension in px for this import (0 keeps originals). */
     private int $imagemaxdim;
 
+    /** @var bool Whether plain image runs are rendered as Bootstrap card groups. */
+    private bool $cardgroup;
+
     /**
      * Constructor.
      *
      * @param \stdClass $book The book activity record.
      * @param \context_module $context The book's module context.
-     * @param array $options Import options: 'sectioncolour' (string) and 'imagemaxdim' (int).
+     * @param array $options Import options: 'sectioncolour' (string), 'imagemaxdim'
+     *                       (int) and 'cardgroup' (bool).
      */
     public function __construct(\stdClass $book, \context_module $context, array $options = []) {
         $this->book = $book;
@@ -57,6 +61,7 @@ class importer {
         $colour = (string) ($options['sectioncolour'] ?? '#442980');
         $this->sectioncolour = $colour === '' ? '#442980' : $colour;
         $this->imagemaxdim = (int) ($options['imagemaxdim'] ?? 1600);
+        $this->cardgroup = !empty($options['cardgroup']);
     }
 
     /**
@@ -87,7 +92,7 @@ class importer {
         $maxdim = $this->imagemaxdim;
         $path = self::stage($pptx);
         $package = new package($path);
-        $builder = new html_builder($this->sectioncolour);
+        $builder = new html_builder($this->sectioncolour, $this->cardgroup);
 
         try {
             $slidepaths = $package->get_slide_paths();
@@ -284,10 +289,16 @@ class importer {
         $has = static function (string $class): string {
             return 'contains(concat(" ", normalize-space(@class), " "), " ' . $class . ' ")';
         };
+        // A card and its zoom modal both reference the same image, so a failed
+        // image empties both: drop the card cell and the now-imageless modal, then
+        // any card-group row that is left with no cards.
         $cells = '//*[' . $has('booktool-importpptx-figure') . '][not(.//img)]'
-            . ' | //*[' . $has('booktool-importpptx-grid') . ']/*[not(.//img)]';
+            . ' | //*[' . $has('booktool-importpptx-grid') . ']/*[not(.//img)]'
+            . ' | //*[' . $has('booktool-importpptx-card') . '][not(.//img)]'
+            . ' | //*[' . $has('booktool-importpptx-cardmodal') . '][not(.//img)]';
         $rows = '//*[' . $has('booktool-importpptx-grid') . '][not(*)]'
             . ' | //*[' . $has('booktool-importpptx-cols') . '][not(*)]'
+            . ' | //*[' . $has('booktool-importpptx-cardgroup') . '][not(*)]'
             . ' | //*[contains(concat(" ", normalize-space(@class), " "), " col-")][not(*) and not(normalize-space(.))]';
         do {
             $removed = false;
