@@ -149,6 +149,48 @@ final class importer_test extends \advanced_testcase {
     }
 
     /**
+     * A tall image and the text beside it, with different tops but overlapping
+     * heights, are laid out side by side (image left) rather than stacked.
+     */
+    public function test_overlapping_blocks_columned_by_height(): void {
+        $builder = new html_builder('#442980');
+        $image = new block(block::TYPE_IMAGE, 400000, 300000, 'ppt/media/photo.png');
+        $image->cy = 5000000;
+        $image->cx = 5500000;
+        $text = new block(block::TYPE_TEXT, 1500000, 6500000, ['Body text beside the image.']);
+        $text->cy = 4000000;
+        $text->cx = 5000000;
+        $parsed = (object) ['title' => 'Intro', 'section' => null, 'blocks' => [$image, $text]];
+        $out = $builder->build($parsed);
+        $this->assertStringContainsString('booktool-importpptx-cols', $out->html);
+        $this->assertStringContainsString('col-12 col-md-6', $out->html);
+        $this->assertStringContainsString('@@PLUGINFILE@@/photo.png', $out->html);
+        $this->assertStringContainsString('<p>Body text beside the image.</p>', $out->html);
+        // The image sits in the left column, before the text.
+        $this->assertLessThan(
+            strpos($out->html, 'Body text beside the image.'),
+            strpos($out->html, '@@PLUGINFILE@@/photo.png')
+        );
+    }
+
+    /**
+     * Blocks whose heights do not overlap stay stacked, not columned.
+     */
+    public function test_non_overlapping_blocks_stay_stacked(): void {
+        $builder = new html_builder('#442980');
+        $image = new block(block::TYPE_IMAGE, 400000, 300000, 'ppt/media/top.png');
+        $image->cy = 1500000;
+        $image->cx = 5000000;
+        $text = new block(block::TYPE_TEXT, 2500000, 300000, ['Text below the image.']);
+        $text->cy = 1500000;
+        $text->cx = 5000000;
+        $parsed = (object) ['title' => 'Stack', 'section' => null, 'blocks' => [$image, $text]];
+        $out = $builder->build($parsed);
+        $this->assertStringNotContainsString('booktool-importpptx-cols', $out->html);
+        $this->assertStringContainsString('<p>Text below the image.</p>', $out->html);
+    }
+
+    /**
      * A lone image is wrapped in a centred, size-capped figure, not left full-bleed.
      */
     public function test_single_image_is_a_constrained_figure(): void {

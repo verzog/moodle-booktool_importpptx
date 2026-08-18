@@ -217,12 +217,21 @@ class html_builder {
     }
 
     /**
-     * Partitions blocks already in reading order into consecutive row bands.
+     * Partitions blocks into row bands, left-to-right within each band.
+     *
+     * When every block knows its height, rows are grouped by real vertical
+     * overlap, so a tall shape (an image) and the text beside it — which rarely
+     * share a top edge — are recognised as one row and laid out side by side
+     * instead of stacked. When heights are unknown (synthetic blocks in unit
+     * tests, or shapes with no extent) it falls back to fixed top-y bands.
      *
      * @param block[] $blocks Blocks in reading order.
      * @return array[] A list of bands, each a left-to-right block[].
      */
     private function into_bands(array $blocks): array {
+        if ($this->heights_known($blocks)) {
+            return $this->into_rows_by_overlap($blocks);
+        }
         $bands = [];
         $current = [];
         $lastband = null;
@@ -239,6 +248,82 @@ class html_builder {
             $bands[] = $current;
         }
         return $bands;
+    }
+
+    /**
+     * Whether every block carries a positive height, enabling overlap grouping.
+     *
+     * @param block[] $blocks The blocks to test.
+     * @return bool True if the list is non-empty and all heights are known.
+     */
+    private function heights_known(array $blocks): bool {
+        foreach ($blocks as $b) {
+            if ($b->cy <= 0) {
+                return false;
+            }
+        }
+        return $blocks !== [];
+    }
+
+    /**
+     * Groups blocks into rows by vertical overlap, each row left-to-right by x.
+     *
+     * Processing top-to-bottom, a block joins the open row when it overlaps that
+     * row's vertical span by at least half of the shorter extent; otherwise it
+     * starts a new row. A block beside a tall image thus shares its row, while a
+     * block genuinely below it starts a fresh one.
+     *
+     * @param block[] $blocks The blocks to group.
+     * @return array[] A list of rows, each a left-to-right block[].
+     */
+    private function into_rows_by_overlap(array $blocks): array {
+        $sorted = $blocks;
+        usort($sorted, static function (block $a, block $b): int {
+            return [$a->y, $a->x] <=> [$b->y, $b->x];
+        });
+        $rows = [];
+        $current = [];
+        $top = 0;
+        $bot = 0;
+        foreach ($sorted as $b) {
+            $btop = $b->y;
+            $bbot = $b->y + $b->cy;
+            if ($current === []) {
+                $current = [$b];
+                $top = $btop;
+                $bot = $bbot;
+                continue;
+            }
+            $overlap = min($bot, $bbot) - max($top, $btop);
+            $shorter = max(1, min($bbot - $btop, $bot - $top));
+            if ($overlap * 2 >= $shorter) {
+                $current[] = $b;
+                $top = min($top, $btop);
+                $bot = max($bot, $bbot);
+            } else {
+                $rows[] = $this->sort_by_x($current);
+                $current = [$b];
+                $top = $btop;
+                $bot = $bbot;
+            }
+        }
+        if ($current !== []) {
+            $rows[] = $this->sort_by_x($current);
+        }
+        return $rows;
+    }
+
+    /**
+     * Orders a row's blocks left-to-right by horizontal offset.
+     *
+     * @param block[] $row The row's blocks.
+     * @return block[] The blocks sorted by x.
+     */
+    private function sort_by_x(array $row): array {
+        usort($row, static function (block $a, block $b): int {
+            return $a->x <=> $b->x;
+        });
+        return $row;
     }
 
     /**
