@@ -786,6 +786,17 @@ class slide {
                 $cx = (int) round($cx * $tf['sx']);
                 $cy = (int) round($cy * $tf['sy']);
             }
+            // A quarter-turn rotation swaps a shape's footprint on the slide, so
+            // its vertical extent becomes the unrotated width. rot is in 60000ths
+            // of a degree; treat rotations nearer a quarter-turn than to level as
+            // a swap so the overlap grouper sees the true on-slide height.
+            $xfrm = $ext->parentNode;
+            if ($xfrm instanceof \DOMElement && $xfrm->getAttribute('rot') !== '') {
+                $deg = (int) round(abs((int) $xfrm->getAttribute('rot')) / 60000) % 180;
+                if ($deg >= 45 && $deg < 135) {
+                    [$cx, $cy] = [$cy, $cx];
+                }
+            }
             return [$cy, $cx];
         }
         return [0, 0];

@@ -327,6 +327,19 @@ class html_builder {
     }
 
     /**
+     * Orders blocks top-to-bottom by vertical offset (stable on ties).
+     *
+     * @param block[] $blocks The blocks.
+     * @return block[] The blocks sorted by y.
+     */
+    private function sort_by_y(array $blocks): array {
+        usort($blocks, static function (block $a, block $b): int {
+            return $a->y <=> $b->y;
+        });
+        return $blocks;
+    }
+
+    /**
      * Returns the image references for a band if every block in it is an image.
      *
      * @param block[] $band The band's blocks.
@@ -377,10 +390,11 @@ class html_builder {
      */
     private function render_columns(array $band): string {
         $columns = $this->cluster_by_x($band);
-        // One horizontal group, or too many to sit side by side cleanly: just stack.
+        // One horizontal group, or too many to sit side by side cleanly: just
+        // stack in reading order (top-to-bottom).
         if (count($columns) < 2 || count($columns) > 4) {
             $stack = '';
-            foreach ($band as $b) {
+            foreach ($this->sort_by_y($band) as $b) {
                 $stack .= $this->render_block($b);
             }
             return $stack;
@@ -389,7 +403,10 @@ class html_builder {
         $cells = '';
         foreach ($columns as $group) {
             $inner = '';
-            foreach ($group as $b) {
+            // Within a column, keep the slide's top-to-bottom order: the row was
+            // sorted left-to-right for clustering, which can reorder stacked
+            // blocks that share a column.
+            foreach ($this->sort_by_y($group) as $b) {
                 $inner .= $this->render_cell($b);
             }
             $cells .= '<div class="' . $col . '">' . $inner . '</div>';
@@ -407,14 +424,20 @@ class html_builder {
     private function cluster_by_x(array $band): array {
         $clusters = [];
         $current = [];
-        $lastx = null;
+        $right = null;
         foreach ($band as $b) {
-            if ($lastx !== null && $b->x - $lastx > self::COLUMN_GAP_EMU && $current !== []) {
+            // Start a new column only when this block begins to the right of the
+            // whole current column — a genuine horizontal split. A block whose
+            // span overlaps the column (e.g. a caption laid over a background
+            // picture at a different x) stays in it and is stacked, not columned.
+            if ($right !== null && $b->x > $right && $current !== []) {
                 $clusters[] = $current;
                 $current = [];
+                $right = null;
             }
             $current[] = $b;
-            $lastx = $b->x;
+            $edge = $b->cx > 0 ? $b->x + $b->cx : $b->x + self::COLUMN_GAP_EMU;
+            $right = $right === null ? $edge : max($right, $edge);
         }
         if ($current !== []) {
             $clusters[] = $current;

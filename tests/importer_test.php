@@ -191,6 +191,48 @@ final class importer_test extends \advanced_testcase {
     }
 
     /**
+     * Text overlaid on a wide background picture (its span within the picture's)
+     * is stacked, not squeezed into adjacent half-width columns.
+     */
+    public function test_text_over_photo_not_columned(): void {
+        $builder = new html_builder('#442980');
+        $photo = new block(block::TYPE_IMAGE, 400000, 400000, 'ppt/media/bg.png');
+        $photo->cy = 5000000;
+        $photo->cx = 9000000;
+        $text = new block(block::TYPE_TEXT, 1000000, 2000000, ['Caption over the photo.']);
+        $text->cy = 800000;
+        $text->cx = 4000000;
+        $parsed = (object) ['title' => 'Overlay', 'section' => null, 'blocks' => [$photo, $text]];
+        $out = $builder->build($parsed);
+        $this->assertStringNotContainsString('booktool-importpptx-cols', $out->html);
+        $this->assertStringContainsString('<p>Caption over the photo.</p>', $out->html);
+    }
+
+    /**
+     * Stacked text boxes sharing a column keep their top-to-bottom order even when
+     * the lower box has a slightly smaller x than the upper one.
+     */
+    public function test_column_blocks_keep_top_to_bottom_order(): void {
+        $builder = new html_builder('#442980');
+        $image = new block(block::TYPE_IMAGE, 400000, 300000, 'ppt/media/left.png');
+        $image->cy = 5000000;
+        $image->cx = 5500000;
+        $upper = new block(block::TYPE_TEXT, 1000000, 6500000, ['Upper text.']);
+        $upper->cy = 1500000;
+        $upper->cx = 5000000;
+        $lower = new block(block::TYPE_TEXT, 3000000, 6400000, ['Lower text.']);
+        $lower->cy = 1500000;
+        $lower->cx = 5000000;
+        $parsed = (object) ['title' => 'Order', 'section' => null, 'blocks' => [$image, $upper, $lower]];
+        $out = $builder->build($parsed);
+        $this->assertStringContainsString('booktool-importpptx-cols', $out->html);
+        $this->assertLessThan(
+            strpos($out->html, 'Lower text.'),
+            strpos($out->html, 'Upper text.')
+        );
+    }
+
+    /**
      * A lone image is wrapped in a centred, size-capped figure, not left full-bleed.
      */
     public function test_single_image_is_a_constrained_figure(): void {
