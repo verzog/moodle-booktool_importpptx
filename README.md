@@ -108,6 +108,26 @@ Copy the plugin so it lives at `mod/book/tool/importpptx/` (or
    the number of chapters to create.
 4. The new chapters are added after any existing ones.
 
+## Import as: editable content or faithful images
+
+When the server has **LibreOffice** and the **poppler** tools, the import form
+offers an **Import as** choice:
+
+- **Editable content** (default) — the pure-PHP path described above: each slide
+  becomes text, lists, tables, images and reconstructed diagrams you can keep
+  editing.
+- **Faithful images** — each slide is rendered to a picture with headless
+  LibreOffice (`.pptx` → PDF → one image per slide, reusing the PDF backend), so
+  the chapter looks exactly as in PowerPoint — diagrams, SmartArt, gradients and
+  bespoke artwork included. These chapters are images, not editable text, so use
+  this when fidelity matters more than editing.
+
+LibreOffice is invoked with argument arrays (never a shell string), in a private
+per-run profile, so there is no command-injection surface. If LibreOffice lives
+outside the system path, set its directory in
+`$CFG->forced_plugin_settings['booktool_importpptx']['libreofficepath']`. When
+the tools are absent the option simply does not appear and import stays editable.
+
 ## Import options
 
 Book tools cannot expose a Site administration settings page (the Book module

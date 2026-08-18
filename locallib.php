@@ -52,7 +52,7 @@ function booktool_importpptx_process(
     // (overridable via forced_plugin_settings / the CLI if a site needs to).
     $threshold = get_config('booktool_importpptx', 'asyncthreshold');
     $threshold = ($threshold === false || $threshold === '') ? 30 : (int) $threshold;
-    $count = booktool_importpptx_count($file);
+    $count = booktool_importpptx_count($file, $options);
 
     if ($count > $threshold) {
         $task = new \booktool_importpptx\task\import_task();
@@ -63,20 +63,41 @@ function booktool_importpptx_process(
             'type' => booktool_importpptx_type($file),
             'imagemaxdim' => (int) ($options['imagemaxdim'] ?? 1600),
             'sectioncolour' => (string) ($options['sectioncolour'] ?? '#442980'),
+            'importmode' => (string) ($options['importmode'] ?? 'editable'),
         ]);
         $task->set_userid($USER->id);
         \core\task\manager::queue_adhoc_task($task);
         return (object) ['queued' => true, 'count' => $count];
     }
 
-    if (booktool_importpptx_type($file) === 'pdf') {
-        $importer = new \booktool_importpptx\pdf_importer($book, $context, $options);
-    } else {
-        $importer = new \booktool_importpptx\importer($book, $context, $options);
-    }
+    $importer = booktool_importpptx_importer($file, $book, $context, $options);
     $created = $importer->import($file);
     \booktool_importpptx\pending_file::delete($context, $pendingid);
     return (object) ['queued' => false, 'count' => $created];
+}
+
+/**
+ * Chooses the importer for an upload, honouring the requested import mode.
+ *
+ * A PDF always imports as page images. A PowerPoint imports as editable
+ * chapters by default, or as one rendered image per slide when the "images"
+ * mode is requested and the LibreOffice render backend is available.
+ *
+ * @param stored_file $file The staged upload.
+ * @param stdClass $book The target book record.
+ * @param context_module $context The book's module context.
+ * @param array $options Import options (including 'importmode').
+ * @return object An importer exposing import(stored_file): int.
+ */
+function booktool_importpptx_importer(stored_file $file, stdClass $book, context_module $context, array $options) {
+    if (booktool_importpptx_type($file) === 'pdf') {
+        return new \booktool_importpptx\pdf_importer($book, $context, $options);
+    }
+    $mode = (string) ($options['importmode'] ?? 'editable');
+    if ($mode === 'images' && \booktool_importpptx\office\renderer::is_available()) {
+        return new \booktool_importpptx\office_importer($book, $context, $options);
+    }
+    return new \booktool_importpptx\importer($book, $context, $options);
 }
 
 /**
@@ -93,12 +114,22 @@ function booktool_importpptx_type(stored_file $file): string {
 /**
  * Counts the units (slides or pages) an upload will produce, per backend.
  *
+ * Counting mirrors the importer routing: a PDF is counted by page, an image-mode
+ * PowerPoint by its raw slide parts (so a Strict OOXML deck bound for LibreOffice
+ * is not blocked by the editable parser), and everything else by the editable
+ * parser's slide count.
+ *
  * @param stored_file $file The uploaded file.
+ * @param array $options Import options (including 'importmode').
  * @return int The number of chapters the import will create.
  */
-function booktool_importpptx_count(stored_file $file): int {
+function booktool_importpptx_count(stored_file $file, array $options = []): int {
     if (booktool_importpptx_type($file) === 'pdf') {
         return \booktool_importpptx\pdf_importer::count_pages($file);
+    }
+    $mode = (string) ($options['importmode'] ?? 'editable');
+    if ($mode === 'images' && \booktool_importpptx\office\renderer::is_available()) {
+        return \booktool_importpptx\office_importer::count_slides($file);
     }
     return \booktool_importpptx\importer::count_slides($file);
 }
