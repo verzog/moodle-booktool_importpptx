@@ -108,6 +108,9 @@ jobs:
           echo "poppler-utils install failed after 3 attempts" >&2
           exit 1
 
+      - name: Authenticate composer with GitHub (avoid codeload 429s)
+        run: composer config -g github-oauth.github.com "${{ secrets.GITHUB_TOKEN }}"
+
       - name: Initialise moodle-plugin-ci
         run: |
           composer create-project -n --no-dev --prefer-dist \
