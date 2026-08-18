@@ -426,11 +426,12 @@ class html_builder {
         $current = [];
         $right = null;
         foreach ($band as $b) {
-            // Start a new column only when this block begins to the right of the
-            // whole current column — a genuine horizontal split. A block whose
-            // span overlaps the column (e.g. a caption laid over a background
-            // picture at a different x) stays in it and is stacked, not columned.
-            if ($right !== null && $b->x > $right && $current !== []) {
+            // Start a new column only when this block begins at or past the
+            // right edge of the whole current column — a genuine horizontal
+            // split. A block whose span overlaps the column (e.g. a caption
+            // laid over a background picture at a different x) stays in it and
+            // is stacked, not columned.
+            if ($right !== null && $b->x >= $right && $current !== []) {
                 $clusters[] = $current;
                 $current = [];
                 $right = null;
