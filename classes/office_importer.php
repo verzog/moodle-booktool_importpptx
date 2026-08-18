@@ -136,8 +136,15 @@ class office_importer {
                 $titles = [];
                 $position = 0;
                 foreach (self::slide_order($zip) as $slidepath) {
+                    $doc = self::load_xml($zip, $slidepath);
+                    // LibreOffice omits hidden slides from the PDF by default, so
+                    // skip them here too, keeping the title positions aligned with
+                    // the visible rendered pages.
+                    if ($doc !== null && self::is_hidden($doc)) {
+                        continue;
+                    }
                     $position++;
-                    $titles[$position] = self::slide_title_text($zip, $slidepath);
+                    $titles[$position] = $doc !== null ? self::slide_title_text($doc) : '';
                 }
                 return $titles;
             } finally {
@@ -218,17 +225,23 @@ class office_importer {
     }
 
     /**
-     * Extracts the title placeholder's text from a slide part.
+     * Whether a slide is hidden (p:sld show="0"), which LibreOffice skips on export.
      *
-     * @param \ZipArchive $zip The open package.
-     * @param string $path The slide's zip entry name.
+     * @param \DOMDocument $doc The parsed slide document.
+     * @return bool True if the slide is marked hidden.
+     */
+    private static function is_hidden(\DOMDocument $doc): bool {
+        $root = $doc->documentElement;
+        return $root instanceof \DOMElement && $root->getAttribute('show') === '0';
+    }
+
+    /**
+     * Extracts the title placeholder's text from a parsed slide document.
+     *
+     * @param \DOMDocument $doc The parsed slide document.
      * @return string The title text (empty when the slide has no title placeholder).
      */
-    private static function slide_title_text(\ZipArchive $zip, string $path): string {
-        $doc = self::load_xml($zip, $path);
-        if ($doc === null) {
-            return '';
-        }
+    private static function slide_title_text(\DOMDocument $doc): string {
         $xpath = new \DOMXPath($doc);
         $query = "//*[local-name()='sp'][.//*[local-name()='ph'][@type='title' or @type='ctrTitle']][1]";
         $sp = $xpath->query($query)->item(0);

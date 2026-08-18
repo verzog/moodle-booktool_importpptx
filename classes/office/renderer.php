@@ -83,7 +83,10 @@ class renderer {
         // launch its own cold probe: the winner probes and stores the result and
         // the rest reuse it once the lock frees. A failed lock just probes anyway.
         $factory = \core\lock\lock_config::get_lock_factory('booktool_importpptx_office');
-        $lock = $factory->get_lock('probe', self::PROBE_TIMEOUT + 5);
+        // Scope the lock to this environment's cache key so only requests that
+        // would share the resulting value serialise; nodes with different keys
+        // (and thus different results) do not needlessly wait on each other.
+        $lock = $factory->get_lock(self::cache_key('probe'), self::PROBE_TIMEOUT + 5);
         try {
             if ($lock && ($hit = self::read_cache()) !== null) {
                 self::$available = $hit;
