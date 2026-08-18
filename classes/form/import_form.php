@@ -73,6 +73,14 @@ class import_form extends \moodleform {
         $mform->addHelpButton('imagemaxdim', 'optionimagemaxdim', 'booktool_importpptx');
         $mform->setAdvanced('imagemaxdim');
 
+        // Editable-mode only: render plain image runs as a Bootstrap card group
+        // (the same markup the tiny_bootstrap editor plugin inserts).
+        $mform->addElement('advcheckbox', 'cardgroup', get_string('optioncardgroup', 'booktool_importpptx'));
+        $mform->setType('cardgroup', PARAM_BOOL);
+        $mform->setDefault('cardgroup', 0);
+        $mform->addHelpButton('cardgroup', 'optioncardgroup', 'booktool_importpptx');
+        $mform->setAdvanced('cardgroup');
+
         $mform->addElement(
             'text',
             'sectioncolour',
