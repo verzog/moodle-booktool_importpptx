@@ -47,9 +47,6 @@ class html_builder {
     /** @var bool Whether runs of plain (non-diagram) images become Bootstrap card groups. */
     private bool $cardgroup;
 
-    /** @var int Running counter for unique card/modal DOM ids within a chapter. */
-    private int $carduid = 0;
-
     /** @var array Map of chapter filename => source media path in the package. */
     private array $images = [];
 
@@ -78,7 +75,6 @@ class html_builder {
      */
     public function build(\stdClass $parsed): \stdClass {
         $this->images = [];
-        $this->carduid = 0;
         if ($parsed->section !== null && $parsed->section->panelright !== null) {
             return $this->build_section($parsed);
         }
@@ -523,7 +519,10 @@ class html_builder {
         $modals = [];
         foreach ($imgs as $idx => $ref) {
             $caption = ($caps !== null && isset($caps[$idx])) ? trim($caps[$idx]) : '';
-            $uid = 'bookImportCard' . (++$this->carduid);
+            // A request-unique id keeps the trigger/modal pair distinct even when
+            // several chapters (each built separately) render on one page, as in
+            // the Print book view — a per-chapter counter would repeat and cross-wire.
+            $uid = \html_writer::random_id('bookImportCard');
             $body = $caption === ''
                 ? ''
                 : '<div class="card-body"><p class="card-text">' . $caption . '</p></div>';
