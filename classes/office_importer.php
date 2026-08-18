@@ -25,6 +25,7 @@
 namespace booktool_importpptx;
 
 use booktool_importpptx\office\renderer;
+use booktool_importpptx\pptx\package;
 
 /**
  * "Whole deck as images" backend: renders every slide to a faithful image with
@@ -255,6 +256,13 @@ class office_importer {
      * @return \DOMDocument|null The parsed document, or null.
      */
     private static function load_xml(\ZipArchive $zip, string $name): ?\DOMDocument {
+        // Bound the part by its declared uncompressed size before inflating it,
+        // so a zip-bombed title/presentation part cannot exhaust the worker here
+        // (this read happens before the render path's whole-archive size guard).
+        $stat = $zip->statName($name);
+        if ($stat === false || (int) $stat['size'] > package::MAX_PART_SIZE) {
+            return null;
+        }
         $data = $zip->getFromName($name);
         if ($data === false || $data === '') {
             return null;
