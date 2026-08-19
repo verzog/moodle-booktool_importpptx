@@ -47,13 +47,21 @@ class importer {
     /** @var bool Whether plain image runs are rendered as Bootstrap card groups. */
     private bool $cardgroup;
 
+    /** @var int Point size forced on body text (0 keeps the slide's own sizes). */
+    private int $bodysize;
+
+    /** @var int Point size forced on text beside an image (0 keeps the slide's own sizes). */
+    private int $adjacentsize;
+
     /**
      * Constructor.
      *
      * @param \stdClass $book The book activity record.
      * @param \context_module $context The book's module context.
      * @param array $options Import options: 'sectioncolour' (string), 'imagemaxdim'
-     *                       (int) and 'cardgroup' (bool).
+     *                       (int), 'cardgroup' (bool), 'bodysize' (int pt) and
+     *                       'adjacentsize' (int pt); the two sizes are 0 to keep
+     *                       the slide's own sizes.
      */
     public function __construct(\stdClass $book, \context_module $context, array $options = []) {
         $this->book = $book;
@@ -62,6 +70,8 @@ class importer {
         $this->sectioncolour = $colour === '' ? '#442980' : $colour;
         $this->imagemaxdim = (int) ($options['imagemaxdim'] ?? 1600);
         $this->cardgroup = !empty($options['cardgroup']);
+        $this->bodysize = max(0, (int) ($options['bodysize'] ?? 0));
+        $this->adjacentsize = max(0, (int) ($options['adjacentsize'] ?? 0));
     }
 
     /**
@@ -92,7 +102,7 @@ class importer {
         $maxdim = $this->imagemaxdim;
         $path = self::stage($pptx);
         $package = new package($path);
-        $builder = new html_builder($this->sectioncolour, $this->cardgroup);
+        $builder = new html_builder($this->sectioncolour, $this->cardgroup, $this->bodysize, $this->adjacentsize);
 
         try {
             $slidepaths = $package->get_slide_paths();

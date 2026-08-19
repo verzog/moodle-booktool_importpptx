@@ -81,6 +81,24 @@ class import_form extends \moodleform {
         $mform->addHelpButton('cardgroup', 'optioncardgroup', 'booktool_importpptx');
         $mform->setAdvanced('cardgroup');
 
+        // Editable-mode only: force a point size on body text and on text that
+        // sits beside an image, overriding the sizes carried over from the slide.
+        $sizes = [0 => get_string('fontsizekeep', 'booktool_importpptx')];
+        foreach ([12, 14, 16, 18, 20, 24, 28, 32, 36] as $pt) {
+            $sizes[$pt] = get_string('fontsizeoption', 'booktool_importpptx', $pt);
+        }
+        $mform->addElement('select', 'bodysize', get_string('optionbodysize', 'booktool_importpptx'), $sizes);
+        $mform->setType('bodysize', PARAM_INT);
+        $mform->setDefault('bodysize', 0);
+        $mform->addHelpButton('bodysize', 'optionbodysize', 'booktool_importpptx');
+        $mform->setAdvanced('bodysize');
+
+        $mform->addElement('select', 'adjacentsize', get_string('optionadjacentsize', 'booktool_importpptx'), $sizes);
+        $mform->setType('adjacentsize', PARAM_INT);
+        $mform->setDefault('adjacentsize', 0);
+        $mform->addHelpButton('adjacentsize', 'optionadjacentsize', 'booktool_importpptx');
+        $mform->setAdvanced('adjacentsize');
+
         $mform->addElement(
             'text',
             'sectioncolour',
