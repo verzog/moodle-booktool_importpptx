@@ -15,7 +15,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Version details for the PowerPoint import tool for the Book module.
+ * Hook callbacks for booktool_importpptx.
  *
  * @package    booktool_importpptx
  * @copyright  2026 Vernon Spain
@@ -24,11 +24,9 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->component = 'booktool_importpptx';
-$plugin->version   = 2026081907;
-$plugin->requires  = 2025041400;
-$plugin->maturity  = MATURITY_STABLE;
-$plugin->release   = '1.11.0';
-$plugin->dependencies = [
-    'mod_book' => ANY_VERSION,
+$callbacks = [
+    [
+        'hook' => \core\hook\output\before_footer_html_generation::class,
+        'callback' => '\booktool_importpptx\hook_callbacks::before_footer_html_generation',
+    ],
 ];
