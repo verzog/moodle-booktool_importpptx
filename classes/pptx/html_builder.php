@@ -150,14 +150,18 @@ class html_builder {
         }));
 
         $colour = self::safe_colour($parsed->section->colour ?? '', $this->defaultcolour);
-        $plate = '';
-        if (!empty($lines)) {
-            $plate = '<div class="booktool-importpptx-plate" style="background-color:' . $colour . ';">'
-                . implode('<br>', $lines) . '</div>';
-        }
         $lede = $this->render_items($lead);
-        $hero = '<div class="booktool-importpptx-section">' . $plate
-            . '<div class="booktool-importpptx-lede">' . $lede . '</div></div>';
+        if (!empty($lines)) {
+            // Bootstrap grid: the coloured label plate in a narrow col-3 beside the
+            // lede text in col-9, so the two sit cleanly side by side and the plate
+            // fills the row height instead of floating as a fixed-width box.
+            $plate = '<div class="col-12 col-md-3"><div class="booktool-importpptx-plate" style="background-color:'
+                . $colour . ';">' . implode('<br>', $lines) . '</div></div>';
+            $hero = '<div class="container-fluid booktool-importpptx-section"><div class="row">'
+                . $plate . '<div class="col-12 col-md-9 booktool-importpptx-lede">' . $lede . '</div></div></div>';
+        } else {
+            $hero = '<div class="booktool-importpptx-lede">' . $lede . '</div>';
+        }
         $mediahtml = $this->render_items($media);
         $html = trim($hero . ($mediahtml !== '' ? "\n" . $mediahtml : ''));
 
