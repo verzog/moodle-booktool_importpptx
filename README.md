@@ -91,8 +91,14 @@ copy and PowerPoint import when you want editable text.
 - Moodle 5.0 or later
 - PHP 8.2 or later
 - The `zip`, `dom` and (for optional image down-scaling) `gd` PHP extensions
-- **Optional, for PDF import only:** the `poppler-utils` package (`pdfinfo`,
-  `pdftoppm`) and the `gd` extension
+- **Optional, for PDF import:** the `poppler-utils` binaries (`pdfinfo`,
+  `pdftoppm`) and the `gd` extension. When they are absent the PDF option simply
+  does not appear.
+- **Optional, for rendering slides as images** — the "faithful images" import
+  mode and the "keep SmartArt slides as images" option — both **LibreOffice**
+  (headless `soffice`) *and* the `poppler-utils` binaries: the deck is converted
+  to PDF by LibreOffice and rasterised by poppler. Each of those two options is
+  offered only when both are present.
 
 ## Installation
 
@@ -149,6 +155,12 @@ form itself, under **Show more**:
   import. The zoom relies on the theme's bundled Bootstrap, so no extra plugin is
   needed to view the result — though `tiny_bootstrap` lets a teacher keep editing
   the cards afterwards.
+- **Keep SmartArt slides as images** — off by default, and shown only when the
+  LibreOffice render backend is available. SmartArt diagrams cannot become
+  editable text without losing their meaning (they flatten to a bare bullet
+  list), so with this on any slide containing SmartArt is kept as a faithful
+  rendered image while every other slide stays editable. Applies to the editable
+  import only.
 
 Access to the importer is controlled by the `booktool/importpptx:import`
 capability. The background-task threshold defaults to 30 slides.

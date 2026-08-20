@@ -81,6 +81,18 @@ class import_form extends \moodleform {
         $mform->addHelpButton('cardgroup', 'optioncardgroup', 'booktool_importpptx');
         $mform->setAdvanced('cardgroup');
 
+        // Editable-mode only: keep SmartArt slides (which flatten to a bare list)
+        // as faithful rendered images. Only offered when the render backend exists.
+        if (!empty($this->_customdata['officeenabled'])) {
+            $mform->addElement('advcheckbox', 'smartartimages', get_string('optionsmartartimages', 'booktool_importpptx'));
+            $mform->setDefault('smartartimages', 0);
+            $mform->addHelpButton('smartartimages', 'optionsmartartimages', 'booktool_importpptx');
+            $mform->setAdvanced('smartartimages');
+        } else {
+            $mform->addElement('hidden', 'smartartimages', 0);
+        }
+        $mform->setType('smartartimages', PARAM_BOOL);
+
         // Editable-mode only: force a point size on body text and on text that
         // sits beside an image, overriding the sizes carried over from the slide.
         $sizes = [0 => get_string('fontsizekeep', 'booktool_importpptx')];
