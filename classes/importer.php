@@ -124,7 +124,10 @@ class importer {
 
             // SmartArt diagrams flatten to a bare bullet list in the editable path;
             // when asked (and able), keep those slides as faithful rendered images.
-            $slideimages = $this->smartart_slide_images($pptx, $package, $slidepaths, $maxdim);
+            // Bytes are staged on disk and read back one chapter at a time, so the
+            // whole set of images is never held in memory at once.
+            $stagedir = make_request_directory();
+            $slideimages = $this->smartart_slide_images($pptx, $package, $slidepaths, $maxdim, $stagedir);
 
             $pagenum = (int) $DB->get_field_sql(
                 'SELECT MAX(pagenum) FROM {book_chapters} WHERE bookid = ?',
@@ -150,10 +153,11 @@ class importer {
                 }
 
                 $pagenum++;
-                if (isset($slideimages[$index])) {
+                $slideimage = $slideimages[$index] ?? null;
+                $imagebytes = $slideimage !== null ? file_get_contents($slideimage[1]) : false;
+                if ($imagebytes !== false) {
                     // Keep this SmartArt slide as its rendered image.
-                    [$filename, $bytes] = $slideimages[$index];
-                    $html = '<img src="@@PLUGINFILE@@/' . $filename . '" alt="' . s($title)
+                    $html = '<img src="@@PLUGINFILE@@/' . $slideimage[0] . '" alt="' . s($title)
                         . '" class="img-fluid">';
                     chapter_writer::write(
                         $this->book,
@@ -161,7 +165,7 @@ class importer {
                         $pptx->get_filename(),
                         $title,
                         $html,
-                        [$filename => $bytes],
+                        [$slideimage[0] => $imagebytes],
                         $pagenum,
                         $subchapter
                     );
@@ -191,51 +195,71 @@ class importer {
     }
 
     /**
-     * Renders each SmartArt-bearing slide to a faithful image, keyed by slide index.
+     * Renders each SmartArt-bearing slide to a faithful image staged on disk,
+     * keyed by slide index.
      *
      * SmartArt diagrams flatten to a bare bullet list in the editable path, losing
      * their meaning, so when the option is on and the LibreOffice render backend is
      * available they are kept as images instead. The backend renders each visible
      * slide to a numbered page (hidden slides are skipped), so slide indices are
-     * mapped to page numbers by counting visible slides.
+     * mapped to page numbers by counting visible slides. Each wanted page's bytes
+     * are written to a staged file, read back one at a time when the chapter is
+     * written, so the whole set is never held in memory at once.
      *
      * @param \stored_file $pptx The uploaded presentation.
      * @param package $package The open package (source of slide XML).
      * @param string[] $slidepaths The slide part paths, in order.
      * @param int $maxdim Maximum image dimension in px (0 keeps the rendered size).
-     * @return array Map of slide index to [filename, bytes] for SmartArt slides.
+     * @param string $stagedir A writable directory for staged image files.
+     * @return array Map of slide index to [filename, stagedpath] for SmartArt slides.
      */
     private function smartart_slide_images(
         \stored_file $pptx,
         package $package,
         array $slidepaths,
-        int $maxdim
+        int $maxdim,
+        string $stagedir
     ): array {
+        // Check the option before probing the renderer: an ordinary editable
+        // import must not pay the LibreOffice availability probe.
+        if (!$this->smartartimages) {
+            return [];
+        }
         $renderer = $this->renderer ?? (renderer::is_available() ? new renderer() : null);
-        if (!$this->smartartimages || $renderer === null) {
+        if ($renderer === null) {
             return [];
         }
         // Which visible slides carry SmartArt, keyed by their 1-based render page.
+        // A hidden SmartArt slide (show="0") cannot be imaged — the renderer omits
+        // it from the render — so it keeps its editable (flattened) content.
         $wanted = [];
-        $page = 0;
+        $visible = 0;
         foreach ($slidepaths as $index => $slidepath) {
             $doc = $package->get_xml($slidepath);
             if (self::slide_is_hidden($doc)) {
                 continue;
             }
-            $page++;
+            $visible++;
             if (self::slide_has_smartart($doc)) {
-                $wanted[$page] = $index;
+                $wanted[$visible] = $index;
             }
         }
-        if (empty($wanted)) {
+        // The render backend caps at MAX_PAGES; the editable parser allows more
+        // slides. If the whole-deck render would be refused, skip imaging so the
+        // import still succeeds (SmartArt slides fall back to flattened content).
+        if (empty($wanted) || $visible > pdf\renderer::MAX_PAGES) {
             return [];
         }
         $images = [];
         foreach ($renderer->render_pages($pptx, $maxdim) as [$rendered, $filename, $bytes]) {
-            if (isset($wanted[$rendered])) {
-                $images[$wanted[$rendered]] = [$filename, $bytes];
+            if (!isset($wanted[$rendered])) {
+                continue;
             }
+            $file = $stagedir . '/smartart-' . $rendered;
+            if (file_put_contents($file, $bytes) === false) {
+                throw new \moodle_exception('errorofficerender', 'booktool_importpptx');
+            }
+            $images[$wanted[$rendered]] = [$filename, $file];
         }
         return $images;
     }
