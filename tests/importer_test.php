@@ -149,6 +149,58 @@ final class importer_test extends \advanced_testcase {
     }
 
     /**
+     * With the card-group option on, an image sitting beside text (a column)
+     * becomes a click-to-enlarge card, not a plain picture, while staying in
+     * its column beside the text.
+     */
+    public function test_side_by_side_image_becomes_card_when_card_group_enabled(): void {
+        $builder = new html_builder('#442980', true);
+        $parsed = (object) [
+            'title' => 'Two up',
+            'section' => null,
+            'blocks' => [
+                new block(block::TYPE_TEXT, 2000000, 0, ['Left column paragraph.']),
+                new block(block::TYPE_IMAGE, 2000000, 7000000, 'ppt/media/image1.png'),
+            ],
+        ];
+        $out = $builder->build($parsed);
+        $this->assertStringContainsString('booktool-importpptx-cols', $out->html);
+        $this->assertStringContainsString('<p>Left column paragraph.</p>', $out->html);
+        // The image is a zoomable card (trigger + modal), not a plain figure.
+        $this->assertStringContainsString('booktool-importpptx-card', $out->html);
+        $this->assertStringContainsString('data-bs-toggle="modal"', $out->html);
+        $this->assertStringContainsString('tiny-bs-card-img', $out->html);
+        $this->assertStringContainsString('@@PLUGINFILE@@/image1.png', $out->html);
+        $this->assertStringNotContainsString(
+            '<img src="@@PLUGINFILE@@/image1.png" alt="" class="img-fluid">',
+            $out->html
+        );
+    }
+
+    /**
+     * Without the card-group option, an image beside text stays a plain picture
+     * with no zoom modal.
+     */
+    public function test_side_by_side_image_stays_plain_without_card_group(): void {
+        $builder = new html_builder('#442980', false);
+        $parsed = (object) [
+            'title' => 'Two up',
+            'section' => null,
+            'blocks' => [
+                new block(block::TYPE_TEXT, 2000000, 0, ['Left column paragraph.']),
+                new block(block::TYPE_IMAGE, 2000000, 7000000, 'ppt/media/image1.png'),
+            ],
+        ];
+        $out = $builder->build($parsed);
+        $this->assertStringContainsString('booktool-importpptx-cols', $out->html);
+        $this->assertStringContainsString(
+            '<img src="@@PLUGINFILE@@/image1.png" alt="" class="img-fluid">',
+            $out->html
+        );
+        $this->assertStringNotContainsString('data-bs-toggle="modal"', $out->html);
+    }
+
+    /**
      * A tall image and the text beside it, with different tops but overlapping
      * heights, are laid out side by side (image left) rather than stacked.
      */
@@ -1342,6 +1394,63 @@ final class importer_test extends \advanced_testcase {
             '/',
             'page-1.png'
         ));
+    }
+
+    /**
+     * Runs the private image-dominant detector on a slide built from shape XML.
+     *
+     * @param string $sptree The <spTree> shapes as XML (plain local names).
+     * @return bool The detector's verdict for a standard 16:9 slide.
+     */
+    private function detect_image_dominant(string $sptree): bool {
+        $doc = new \DOMDocument();
+        $doc->loadXML('<sld><cSld><spTree>' . $sptree . '</spTree></cSld></sld>');
+        $method = new \ReflectionMethod(importer::class, 'slide_is_image_dominant');
+        $method->setAccessible(true);
+        return $method->invoke(null, $doc, 12192000 * 6858000);
+    }
+
+    /**
+     * A slide that is one dominant picture with two short labels placed over it
+     * is detected as complex (to be kept as a rendered image).
+     */
+    public function test_image_dominant_slide_with_overlaid_labels_detected(): void {
+        $pic = '<pic><spPr><xfrm><off x="1000000" y="400000"/>'
+            . '<ext cx="10000000" cy="6000000"/></xfrm></spPr></pic>';
+        $label1 = '<sp><spPr><xfrm><off x="2000000" y="1000000"/><ext cx="2000000" cy="500000"/></xfrm></spPr>'
+            . '<txBody><p><r><t>Day 1 post-op</t></r></p></txBody></sp>';
+        $label2 = '<sp><spPr><xfrm><off x="7000000" y="5000000"/><ext cx="2000000" cy="500000"/></xfrm></spPr>'
+            . '<txBody><p><r><t>Result at 6 weeks</t></r></p></txBody></sp>';
+        $this->assertTrue($this->detect_image_dominant($pic . $label1 . $label2));
+    }
+
+    /**
+     * A picture with its captions below it (not overlapping) is an ordinary
+     * figure, left editable rather than imaged.
+     */
+    public function test_picture_with_caption_below_not_image_dominant(): void {
+        $pic = '<pic><spPr><xfrm><off x="1000000" y="400000"/>'
+            . '<ext cx="10000000" cy="6000000"/></xfrm></spPr></pic>';
+        // Both captions sit below the picture's bottom edge (y > 6400000).
+        $cap1 = '<sp><spPr><xfrm><off x="2000000" y="6600000"/><ext cx="2000000" cy="300000"/></xfrm></spPr>'
+            . '<txBody><p><r><t>Caption one</t></r></p></txBody></sp>';
+        $cap2 = '<sp><spPr><xfrm><off x="7000000" y="6600000"/><ext cx="2000000" cy="300000"/></xfrm></spPr>'
+            . '<txBody><p><r><t>Caption two</t></r></p></txBody></sp>';
+        $this->assertFalse($this->detect_image_dominant($pic . $cap1 . $cap2));
+    }
+
+    /**
+     * A small picture (below the dominance threshold) with overlapping labels is
+     * not treated as an image-dominant slide.
+     */
+    public function test_small_picture_with_labels_not_image_dominant(): void {
+        $pic = '<pic><spPr><xfrm><off x="1000000" y="1000000"/>'
+            . '<ext cx="2000000" cy="1000000"/></xfrm></spPr></pic>';
+        $label1 = '<sp><spPr><xfrm><off x="1200000" y="1200000"/><ext cx="600000" cy="300000"/></xfrm></spPr>'
+            . '<txBody><p><r><t>A</t></r></p></txBody></sp>';
+        $label2 = '<sp><spPr><xfrm><off x="1400000" y="1400000"/><ext cx="600000" cy="300000"/></xfrm></spPr>'
+            . '<txBody><p><r><t>B</t></r></p></txBody></sp>';
+        $this->assertFalse($this->detect_image_dominant($pic . $label1 . $label2));
     }
 
     /**
