@@ -61,11 +61,22 @@ if ($cancelpending) {
     redirect($returnurl);
 }
 
-$pdfenabled = \booktool_importpptx\pdf\renderer::is_available();
-$officeenabled = \booktool_importpptx\office\renderer::is_available();
+// Probe each binary once: poppler drives PDF import, and both poppler and
+// LibreOffice drive the image-rendering features. Knowing them separately lets
+// the form show which one is missing.
+$popplerenabled = \booktool_importpptx\pdf\renderer::is_available();
+$libreofficeenabled = \booktool_importpptx\office\renderer::libreoffice_available();
+$pdfenabled = $popplerenabled;
+$officeenabled = $popplerenabled && $libreofficeenabled;
 $mform = new \booktool_importpptx\form\import_form(
     null,
-    ['id' => $cm->id, 'pdfenabled' => $pdfenabled, 'officeenabled' => $officeenabled]
+    [
+        'id' => $cm->id,
+        'pdfenabled' => $pdfenabled,
+        'officeenabled' => $officeenabled,
+        'popplerenabled' => $popplerenabled,
+        'libreofficeenabled' => $libreofficeenabled,
+    ]
 );
 if ($mform->is_cancelled()) {
     redirect($returnurl);

@@ -26,6 +26,13 @@ defined('MOODLE_INTERNAL') || die();
 
 $string['asyncqueued'] = 'This upload will create {$a} chapters, so it is being imported in the background. The chapters will appear in this book shortly.';
 $string['audiounsupported'] = 'Your browser does not support the audio element.';
+$string['availabilitycomplex'] = 'Keep complex slides as images';
+$string['availabilityfaithful'] = 'Faithful image import';
+$string['availabilityheading'] = 'Rendering features on this server';
+$string['availabilityno'] = 'Not available';
+$string['availabilitypdf'] = 'PDF import';
+$string['availabilityrequires'] = 'requires {$a}';
+$string['availabilityyes'] = 'Available';
 $string['clicktoenlarge'] = 'Click to enlarge';
 $string['confirmimport'] = 'Import PowerPoint';
 $string['confirmimportdetail'] = 'Create {$a} chapters in this book from the uploaded file? Existing chapters will be kept and the new chapters added after them.';
