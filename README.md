@@ -149,6 +149,12 @@ form itself, under **Show more**:
   import. The zoom relies on the theme's bundled Bootstrap, so no extra plugin is
   needed to view the result — though `tiny_bootstrap` lets a teacher keep editing
   the cards afterwards.
+- **Keep SmartArt slides as images** — off by default, and shown only when the
+  LibreOffice render backend is available. SmartArt diagrams cannot become
+  editable text without losing their meaning (they flatten to a bare bullet
+  list), so with this on any slide containing SmartArt is kept as a faithful
+  rendered image while every other slide stays editable. Applies to the editable
+  import only.
 
 Access to the importer is controlled by the `booktool/importpptx:import`
 capability. The background-task threshold defaults to 30 slides.

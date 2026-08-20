@@ -27,6 +27,7 @@ namespace booktool_importpptx;
 use booktool_importpptx\pptx\package;
 use booktool_importpptx\pptx\slide;
 use booktool_importpptx\pptx\html_builder;
+use booktool_importpptx\office\renderer;
 
 /**
  * Reads a .pptx and creates one book chapter per slide, in slide order.
@@ -53,17 +54,29 @@ class importer {
     /** @var int Point size forced on text beside an image (0 keeps the slide's own sizes). */
     private int $adjacentsize;
 
+    /** @var bool Whether SmartArt slides are kept as rendered images rather than flattened. */
+    private bool $smartartimages;
+
+    /** @var renderer|null The slide-image render backend (injectable for testing). */
+    private ?renderer $renderer;
+
     /**
      * Constructor.
      *
      * @param \stdClass $book The book activity record.
      * @param \context_module $context The book's module context.
      * @param array $options Import options: 'sectioncolour' (string), 'imagemaxdim'
-     *                       (int), 'cardgroup' (bool), 'bodysize' (int pt) and
-     *                       'adjacentsize' (int pt); the two sizes are 0 to keep
-     *                       the slide's own sizes.
+     *                       (int), 'cardgroup' (bool), 'bodysize' (int pt),
+     *                       'adjacentsize' (int pt) and 'smartartimages' (bool);
+     *                       the two sizes are 0 to keep the slide's own sizes.
+     * @param renderer|null $renderer The image render backend, or null for the default.
      */
-    public function __construct(\stdClass $book, \context_module $context, array $options = []) {
+    public function __construct(
+        \stdClass $book,
+        \context_module $context,
+        array $options = [],
+        ?renderer $renderer = null
+    ) {
         $this->book = $book;
         $this->context = $context;
         $colour = (string) ($options['sectioncolour'] ?? '#442980');
@@ -72,6 +85,8 @@ class importer {
         $this->cardgroup = !empty($options['cardgroup']);
         $this->bodysize = max(0, (int) ($options['bodysize'] ?? 0));
         $this->adjacentsize = max(0, (int) ($options['adjacentsize'] ?? 0));
+        $this->smartartimages = !empty($options['smartartimages']);
+        $this->renderer = $renderer;
     }
 
     /**
@@ -107,6 +122,10 @@ class importer {
         try {
             $slidepaths = $package->get_slide_paths();
 
+            // SmartArt diagrams flatten to a bare bullet list in the editable path;
+            // when asked (and able), keep those slides as faithful rendered images.
+            $slideimages = $this->smartart_slide_images($pptx, $package, $slidepaths, $maxdim);
+
             $pagenum = (int) $DB->get_field_sql(
                 'SELECT MAX(pagenum) FROM {book_chapters} WHERE bookid = ?',
                 [$this->book->id]
@@ -131,16 +150,33 @@ class importer {
                 }
 
                 $pagenum++;
-                $this->write_chapter(
-                    $package,
-                    $pptx->get_filename(),
-                    $title,
-                    $chapter->html,
-                    $chapter->images,
-                    $pagenum,
-                    $subchapter,
-                    $maxdim
-                );
+                if (isset($slideimages[$index])) {
+                    // Keep this SmartArt slide as its rendered image.
+                    [$filename, $bytes] = $slideimages[$index];
+                    $html = '<img src="@@PLUGINFILE@@/' . $filename . '" alt="' . s($title)
+                        . '" class="img-fluid">';
+                    chapter_writer::write(
+                        $this->book,
+                        $this->context,
+                        $pptx->get_filename(),
+                        $title,
+                        $html,
+                        [$filename => $bytes],
+                        $pagenum,
+                        $subchapter
+                    );
+                } else {
+                    $this->write_chapter(
+                        $package,
+                        $pptx->get_filename(),
+                        $title,
+                        $chapter->html,
+                        $chapter->images,
+                        $pagenum,
+                        $subchapter,
+                        $maxdim
+                    );
+                }
                 $created++;
             }
 
@@ -152,6 +188,87 @@ class importer {
         } finally {
             $package->close();
         }
+    }
+
+    /**
+     * Renders each SmartArt-bearing slide to a faithful image, keyed by slide index.
+     *
+     * SmartArt diagrams flatten to a bare bullet list in the editable path, losing
+     * their meaning, so when the option is on and the LibreOffice render backend is
+     * available they are kept as images instead. The backend renders each visible
+     * slide to a numbered page (hidden slides are skipped), so slide indices are
+     * mapped to page numbers by counting visible slides.
+     *
+     * @param \stored_file $pptx The uploaded presentation.
+     * @param package $package The open package (source of slide XML).
+     * @param string[] $slidepaths The slide part paths, in order.
+     * @param int $maxdim Maximum image dimension in px (0 keeps the rendered size).
+     * @return array Map of slide index to [filename, bytes] for SmartArt slides.
+     */
+    private function smartart_slide_images(
+        \stored_file $pptx,
+        package $package,
+        array $slidepaths,
+        int $maxdim
+    ): array {
+        $renderer = $this->renderer ?? (renderer::is_available() ? new renderer() : null);
+        if (!$this->smartartimages || $renderer === null) {
+            return [];
+        }
+        // Which visible slides carry SmartArt, keyed by their 1-based render page.
+        $wanted = [];
+        $page = 0;
+        foreach ($slidepaths as $index => $slidepath) {
+            $doc = $package->get_xml($slidepath);
+            if (self::slide_is_hidden($doc)) {
+                continue;
+            }
+            $page++;
+            if (self::slide_has_smartart($doc)) {
+                $wanted[$page] = $index;
+            }
+        }
+        if (empty($wanted)) {
+            return [];
+        }
+        $images = [];
+        foreach ($renderer->render_pages($pptx, $maxdim) as [$rendered, $filename, $bytes]) {
+            if (isset($wanted[$rendered])) {
+                $images[$wanted[$rendered]] = [$filename, $bytes];
+            }
+        }
+        return $images;
+    }
+
+    /**
+     * Whether a slide is hidden (p:sld show="0"), which the renderer skips.
+     *
+     * @param \DOMDocument|null $doc The parsed slide document, or null.
+     * @return bool True if the slide is marked hidden.
+     */
+    private static function slide_is_hidden(?\DOMDocument $doc): bool {
+        if ($doc === null) {
+            return false;
+        }
+        $root = $doc->documentElement;
+        return $root instanceof \DOMElement && $root->getAttribute('show') === '0';
+    }
+
+    /**
+     * Whether a slide carries a SmartArt diagram.
+     *
+     * SmartArt is a graphicFrame holding a diagram data-model relationship (r:dm);
+     * charts (r:id) and tables (a:tbl) do not, so they are not matched.
+     *
+     * @param \DOMDocument|null $doc The parsed slide document, or null.
+     * @return bool True if the slide contains a SmartArt diagram.
+     */
+    private static function slide_has_smartart(?\DOMDocument $doc): bool {
+        if ($doc === null) {
+            return false;
+        }
+        $xpath = new \DOMXPath($doc);
+        return $xpath->query("//*[local-name()='graphicFrame']//*[@*[local-name()='dm']]")->length > 0;
     }
 
     /**
