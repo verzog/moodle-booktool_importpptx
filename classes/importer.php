@@ -57,6 +57,9 @@ class importer {
     /** @var bool Whether SmartArt slides are kept as rendered images rather than flattened. */
     private bool $smartartimages;
 
+    /** @var string Font family forced on the deck before rendering ('' keeps its own). */
+    private string $renderfont;
+
     /** @var renderer|null The slide-image render backend (injectable for testing). */
     private ?renderer $renderer;
 
@@ -67,7 +70,8 @@ class importer {
      * @param \context_module $context The book's module context.
      * @param array $options Import options: 'sectioncolour' (string), 'imagemaxdim'
      *                       (int), 'cardgroup' (bool), 'bodysize' (int pt),
-     *                       'adjacentsize' (int pt) and 'smartartimages' (bool);
+     *                       'adjacentsize' (int pt), 'smartartimages' (bool) and
+     *                       'renderfont' (string font family for rendered slides);
      *                       the two sizes are 0 to keep the slide's own sizes.
      * @param renderer|null $renderer The image render backend, or null for the default.
      */
@@ -86,6 +90,7 @@ class importer {
         $this->bodysize = max(0, (int) ($options['bodysize'] ?? 0));
         $this->adjacentsize = max(0, (int) ($options['adjacentsize'] ?? 0));
         $this->smartartimages = !empty($options['smartartimages']);
+        $this->renderfont = (string) ($options['renderfont'] ?? '');
         $this->renderer = $renderer;
     }
 
@@ -255,7 +260,7 @@ class importer {
             return [];
         }
         $images = [];
-        foreach ($renderer->render_pages($pptx, $maxdim) as [$rendered, $filename, $bytes]) {
+        foreach ($renderer->render_pages($pptx, $maxdim, $this->renderfont) as [$rendered, $filename, $bytes]) {
             if (!isset($wanted[$rendered])) {
                 continue;
             }
