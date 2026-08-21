@@ -45,6 +45,9 @@ class office_importer {
     /** @var int Maximum image dimension in px (0 keeps the rendered size). */
     private int $imagemaxdim;
 
+    /** @var string Font family forced on the deck before rendering ('' keeps its own). */
+    private string $renderfont;
+
     /** @var renderer|null The render backend (injectable for testing). */
     private ?renderer $renderer;
 
@@ -53,13 +56,14 @@ class office_importer {
      *
      * @param \stdClass $book The book activity record.
      * @param \context_module $context The book's module context.
-     * @param array $options Import options ('imagemaxdim' int).
+     * @param array $options Import options ('imagemaxdim' int, 'renderfont' string).
      * @param renderer|null $renderer The render backend, or null to build the default.
      */
     public function __construct(\stdClass $book, \context_module $context, array $options = [], ?renderer $renderer = null) {
         $this->book = $book;
         $this->context = $context;
         $this->imagemaxdim = (int) ($options['imagemaxdim'] ?? 1600);
+        $this->renderfont = (string) ($options['renderfont'] ?? '');
         $this->renderer = $renderer;
     }
 
@@ -417,7 +421,7 @@ class office_importer {
         $renderer = $this->renderer ?? new renderer();
         $titles = self::extract_titles($pptx);
         $created = 0;
-        foreach ($renderer->render_pages($pptx, $this->imagemaxdim) as [$page, $filename, $bytes]) {
+        foreach ($renderer->render_pages($pptx, $this->imagemaxdim, $this->renderfont) as [$page, $filename, $bytes]) {
             $title = self::page_title($titles, $page);
             $html = '<img src="@@PLUGINFILE@@/' . $filename . '" alt="' . s($title) . '" class="img-fluid">';
             $pagenum++;
