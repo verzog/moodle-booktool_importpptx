@@ -15,7 +15,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Version details for the PowerPoint import tool for the Book module.
+ * Scheduled task definitions for the PowerPoint import tool for Book.
  *
  * @package    booktool_importpptx
  * @copyright  2026 Vernon Spain
@@ -24,11 +24,14 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->component = 'booktool_importpptx';
-$plugin->version   = 2026082305;
-$plugin->requires  = 2025041400;
-$plugin->maturity  = MATURITY_STABLE;
-$plugin->release   = '1.16.0';
-$plugin->dependencies = [
-    'mod_book' => ANY_VERSION,
+$tasks = [
+    [
+        'classname' => 'booktool_importpptx\task\cleanup_task',
+        'blocking' => 0,
+        'minute' => 'R',
+        'hour' => 'R',
+        'day' => '*',
+        'month' => '*',
+        'dayofweek' => '*',
+    ],
 ];

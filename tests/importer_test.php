@@ -856,6 +856,30 @@ final class importer_test extends \advanced_testcase {
     }
 
     /**
+     * The cleanup task removes staged uploads past the retention window and
+     * keeps fresh ones.
+     */
+    public function test_cleanup_task_removes_stale_uploads(): void {
+        global $DB;
+        $this->resetAfterTest();
+
+        $stale = $this->make_named_file('stale.pptx', 'x', 11);
+        $fresh = $this->make_named_file('fresh.pptx', 'x', 12);
+        $DB->set_field('files', 'timecreated', time() - 8 * DAYSECS, ['id' => $stale->get_id()]);
+
+        (new \booktool_importpptx\task\cleanup_task())->execute();
+
+        $fs = get_file_storage();
+        $context = \context_system::instance();
+        $this->assertFalse(
+            $fs->file_exists($context->id, 'booktool_importpptx', 'import', 11, '/', 'stale.pptx')
+        );
+        $this->assertTrue(
+            $fs->file_exists($context->id, 'booktool_importpptx', 'import', 12, '/', 'fresh.pptx')
+        );
+    }
+
+    /**
      * WMF/EMF vector images are referenced as PNG (the importer converts them).
      */
     public function test_wmf_image_referenced_as_png(): void {
