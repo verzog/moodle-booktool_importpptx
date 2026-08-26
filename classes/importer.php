@@ -28,6 +28,7 @@ use booktool_importpptx\pptx\package;
 use booktool_importpptx\pptx\slide;
 use booktool_importpptx\pptx\html_builder;
 use booktool_importpptx\office\renderer;
+use booktool_importpptx\office\render_backend;
 
 /**
  * Reads a .pptx and creates one book chapter per slide, in slide order.
@@ -60,8 +61,8 @@ class importer {
     /** @var string Font family forced on the deck before rendering ('' keeps its own). */
     private string $renderfont;
 
-    /** @var renderer|null The slide-image render backend (injectable for testing). */
-    private ?renderer $renderer;
+    /** @var render_backend|null The slide-image render backend (injectable for testing). */
+    private ?render_backend $renderer;
 
     /**
      * Constructor.
@@ -73,13 +74,13 @@ class importer {
      *                       'adjacentsize' (int pt), 'smartartimages' (bool) and
      *                       'renderfont' (string font family for rendered slides);
      *                       the two sizes are 0 to keep the slide's own sizes.
-     * @param renderer|null $renderer The image render backend, or null for the default.
+     * @param render_backend|null $renderer The image render backend, or null for the default.
      */
     public function __construct(
         \stdClass $book,
         \context_module $context,
         array $options = [],
-        ?renderer $renderer = null
+        ?render_backend $renderer = null
     ) {
         $this->book = $book;
         $this->context = $context;
