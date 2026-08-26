@@ -99,7 +99,7 @@ function booktool_importpptx_importer(stored_file $file, stdClass $book, context
         return new \booktool_importpptx\pdf_importer($book, $context, $options);
     }
     $mode = (string) ($options['importmode'] ?? 'editable');
-    if ($mode === 'images' && \booktool_importpptx\office\renderer::is_available()) {
+    if ($mode === 'images' && \booktool_importpptx\office\backend_factory::available()) {
         return new \booktool_importpptx\office_importer($book, $context, $options);
     }
     return new \booktool_importpptx\importer($book, $context, $options);
@@ -133,7 +133,7 @@ function booktool_importpptx_count(stored_file $file, array $options = []): int 
         return \booktool_importpptx\pdf_importer::count_pages($file);
     }
     $mode = (string) ($options['importmode'] ?? 'editable');
-    if ($mode === 'images' && \booktool_importpptx\office\renderer::is_available()) {
+    if ($mode === 'images' && \booktool_importpptx\office\backend_factory::available()) {
         return \booktool_importpptx\office_importer::count_slides($file);
     }
     return \booktool_importpptx\importer::count_slides($file);

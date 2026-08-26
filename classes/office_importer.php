@@ -26,6 +26,7 @@ namespace booktool_importpptx;
 
 use booktool_importpptx\office\renderer;
 use booktool_importpptx\office\render_backend;
+use booktool_importpptx\office\backend_factory;
 use booktool_importpptx\pptx\package;
 use booktool_importpptx\pptx\slide;
 use booktool_importpptx\pptx\html_builder;
@@ -419,7 +420,7 @@ class office_importer {
             [$this->book->id]
         );
 
-        $renderer = $this->renderer ?? new renderer();
+        $renderer = $this->renderer ?? backend_factory::make() ?? new renderer();
         $titles = self::extract_titles($pptx);
         $created = 0;
         foreach ($renderer->render_pages($pptx, $this->imagemaxdim, $this->renderfont) as [$page, $filename, $bytes]) {

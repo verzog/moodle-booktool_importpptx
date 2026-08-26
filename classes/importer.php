@@ -27,8 +27,8 @@ namespace booktool_importpptx;
 use booktool_importpptx\pptx\package;
 use booktool_importpptx\pptx\slide;
 use booktool_importpptx\pptx\html_builder;
-use booktool_importpptx\office\renderer;
 use booktool_importpptx\office\render_backend;
+use booktool_importpptx\office\backend_factory;
 
 /**
  * Reads a .pptx and creates one book chapter per slide, in slide order.
@@ -234,7 +234,7 @@ class importer {
         if (!$this->smartartimages) {
             return [];
         }
-        $renderer = $this->renderer ?? (renderer::is_available() ? new renderer() : null);
+        $renderer = $this->renderer ?? backend_factory::make();
         if ($renderer === null) {
             return [];
         }

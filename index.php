@@ -66,8 +66,11 @@ if ($cancelpending) {
 // the form show which one is missing.
 $popplerenabled = \booktool_importpptx\pdf\renderer::is_available();
 $libreofficeenabled = \booktool_importpptx\office\renderer::libreoffice_available();
+$cloudenabled = \booktool_importpptx\office\cloud_renderer::is_configured();
 $pdfenabled = $popplerenabled;
-$officeenabled = $popplerenabled && $libreofficeenabled;
+// Faithful-image import needs either a local LibreOffice + poppler pair or the
+// external render service, which needs neither on this server.
+$officeenabled = ($popplerenabled && $libreofficeenabled) || $cloudenabled;
 $mform = new \booktool_importpptx\form\import_form(
     null,
     [
@@ -76,6 +79,7 @@ $mform = new \booktool_importpptx\form\import_form(
         'officeenabled' => $officeenabled,
         'popplerenabled' => $popplerenabled,
         'libreofficeenabled' => $libreofficeenabled,
+        'cloudenabled' => $cloudenabled,
     ]
 );
 if ($mform->is_cancelled()) {
