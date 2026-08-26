@@ -25,6 +25,7 @@
 namespace booktool_importpptx;
 
 use booktool_importpptx\office\renderer;
+use booktool_importpptx\office\render_backend;
 use booktool_importpptx\pptx\package;
 use booktool_importpptx\pptx\slide;
 use booktool_importpptx\pptx\html_builder;
@@ -48,8 +49,8 @@ class office_importer {
     /** @var string Font family forced on the deck before rendering ('' keeps its own). */
     private string $renderfont;
 
-    /** @var renderer|null The render backend (injectable for testing). */
-    private ?renderer $renderer;
+    /** @var render_backend|null The render backend (injectable for testing). */
+    private ?render_backend $renderer;
 
     /**
      * Constructor.
@@ -57,9 +58,9 @@ class office_importer {
      * @param \stdClass $book The book activity record.
      * @param \context_module $context The book's module context.
      * @param array $options Import options ('imagemaxdim' int, 'renderfont' string).
-     * @param renderer|null $renderer The render backend, or null to build the default.
+     * @param render_backend|null $renderer The render backend, or null to build the default.
      */
-    public function __construct(\stdClass $book, \context_module $context, array $options = [], ?renderer $renderer = null) {
+    public function __construct(\stdClass $book, \context_module $context, array $options = [], ?render_backend $renderer = null) {
         $this->book = $book;
         $this->context = $context;
         $this->imagemaxdim = (int) ($options['imagemaxdim'] ?? 1600);
