@@ -6,6 +6,17 @@ and the project follows semantic-ish versioning in `$plugin->release`. Routine
 follow-ups that only satisfied the code checker (phpcs/phpdoc) are folded into
 the release they belong to.
 
+## 1.16.2 – 2026-08-27
+
+### Fixed
+- Importing a presentation no longer shows a spurious "No slides could be found
+  in the uploaded presentation" error alongside the success message. When the
+  confirmation step was submitted twice (a double click, or the browser
+  re-issuing the POST while the import ran), the second request found the staging
+  area already cleared by the first and reported it as a "no slides" failure even
+  though the chapters had been created. That case is now treated as already
+  handled and returns quietly to the edit page.
+
 ## 1.16.1 – 2026-08-26
 
 ### Added
