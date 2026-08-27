@@ -78,6 +78,10 @@ function booktool_importpptx_process(
     $importer = booktool_importpptx_importer($file, $book, $context, $options);
     $created = $importer->import($file);
     \booktool_importpptx\pending_file::delete($context, $pendingid);
+    // Record the completed import so a duplicate confirmation (a double click, or
+    // a re-issued POST) can stay quiet instead of mistaking the now-empty staging
+    // area for a failure.
+    \booktool_importpptx\pending_file::mark_imported($context, $pendingid);
     return (object) ['queued' => false, 'count' => $created];
 }
 
