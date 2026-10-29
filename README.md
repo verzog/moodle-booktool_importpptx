@@ -88,7 +88,7 @@ copy and PowerPoint import when you want editable text.
 
 ## Requirements
 
-- Moodle 5.0 or later
+- Moodle 5.1 to 5.3 LTS
 - PHP 8.2 or later
 - The `zip`, `dom` and (for optional image down-scaling) `gd` PHP extensions
 - **Optional, for PDF import:** the `poppler-utils` binaries (`pdfinfo`,
