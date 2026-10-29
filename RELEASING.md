@@ -67,7 +67,12 @@ so the tag lands on already-validated code:
 4. Set the **title** to the tag name and click **Generate release notes** to
    pull in the merged changes since the last tag.
 5. Leave the label on **Latest** for a production release.
-6. **Publish release.** This creates and pushes the tag in one step.
+6. **Publish release.** This creates and pushes the tag in one step. It also
+   runs the **Release zip** workflow, which checks the tag matches
+   `$plugin->release` and attaches `booktool_importpptx-<tag>.zip` to the release within a
+   minute or two. That zip has the right top folder for Moodle's *Install
+   plugins* page and for uploading to moodle.org. If it is ever missing, run
+   **Actions → Release zip → Run workflow** with the tag.
 
 Then point the moodle.org version at that tag as in step 4 above.
 
