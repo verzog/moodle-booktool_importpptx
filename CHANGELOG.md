@@ -6,7 +6,7 @@ and the project follows semantic-ish versioning in `$plugin->release`. Routine
 follow-ups that only satisfied the code checker (phpcs/phpdoc) are folded into
 the release they belong to.
 
-## Unreleased
+## 1.17.0 – 2026-11-01
 
 ### Changed
 - Requires Moodle 5.1 or later and declares support for Moodle 5.1 to 5.3 LTS.
