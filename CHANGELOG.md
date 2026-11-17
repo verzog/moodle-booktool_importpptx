@@ -6,7 +6,7 @@ and the project follows semantic-ish versioning in `$plugin->release`. Routine
 follow-ups that only satisfied the code checker (phpcs/phpdoc) are folded into
 the release they belong to.
 
-## Unreleased
+## 1.18.0 – 2026-11-17
 
 ### Added
 - An API class (`\booktool_importpptx\api`) that other plugins can call to import a presentation
