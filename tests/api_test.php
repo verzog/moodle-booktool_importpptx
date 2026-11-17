@@ -68,6 +68,12 @@ final class api_test extends \advanced_testcase {
         $this->assertSame('Induction slides', $DB->get_field('book', 'name', ['id' => $cm->instance]));
         $this->assertSame($cmid, api::find_activity((int) $course->id, 'Induction slides'));
         $this->assertSame(0, api::find_activity((int) $other->id, 'Induction slides'));
+
+        // Names are tidied the same way when finding and creating.
+        $long = '  ' . str_repeat('x', 300);
+        $longcmid = api::create_activity((int) $course->id, $long);
+        $this->assertSame($longcmid, api::find_activity((int) $course->id, $long));
+        $this->assertSame($cmid, api::find_activity((int) $course->id, ' Induction slides '));
     }
 
     /**

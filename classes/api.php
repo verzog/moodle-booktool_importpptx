@@ -92,7 +92,7 @@ class api {
                        AND b.name = :name
                        AND cm.deletioninprogress = 0
               ORDER BY cm.id";
-        $params = ['courseid' => $courseid, 'modname' => self::MODULE, 'name' => $name];
+        $params = ['courseid' => $courseid, 'modname' => self::MODULE, 'name' => self::clean_name($name)];
         $records = $DB->get_records_sql($sql, $params, 0, 1);
         $record = reset($records);
         return $record ? (int) $record->id : 0;
@@ -120,7 +120,7 @@ class api {
             'course' => $course->id,
             'section' => max(0, $section),
             'visible' => 1,
-            'name' => \core_text::substr(trim($name), 0, 255),
+            'name' => self::clean_name($name),
             'introeditor' => ['text' => '', 'format' => FORMAT_HTML, 'itemid' => file_get_unused_draft_itemid()],
             'numbering' => (int) get_config('book', 'numbering'),
             'navstyle' => (int) get_config('book', 'navstyle'),
@@ -169,6 +169,16 @@ class api {
         } finally {
             pending_file::delete($context, (int) $file->get_itemid());
         }
+    }
+
+    /**
+     * Tidies an activity name the same way for finding and creating, so the two always agree.
+     *
+     * @param string $name The name as supplied by the caller.
+     * @return string The name trimmed and cut to the 255 characters the database holds.
+     */
+    private static function clean_name(string $name): string {
+        return \core_text::substr(trim($name), 0, 255);
     }
 
     /**
