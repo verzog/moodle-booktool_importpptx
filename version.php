@@ -25,11 +25,11 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'booktool_importpptx';
-$plugin->version   = 2026111700;
+$plugin->version   = 2026111701;
 $plugin->requires  = 2025100600; // Moodle 5.1.
 $plugin->supported = [501, 503];
 $plugin->maturity  = MATURITY_STABLE;
-$plugin->release   = '1.17.0';
+$plugin->release   = '1.18.0';
 $plugin->dependencies = [
     'mod_book' => ANY_VERSION,
 ];
