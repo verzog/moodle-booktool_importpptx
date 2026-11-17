@@ -72,6 +72,32 @@ class pending_file {
     }
 
     /**
+     * Copies a file on the server into durable storage under an unused item id.
+     *
+     * Used by {@see api::import_path()}, which has no draft area to read from.
+     *
+     * @param string $path Absolute path to the file.
+     * @param \context_module $context The book's module context.
+     * @return \stored_file The stored file; its item id identifies it for deletion.
+     */
+    public static function store_path(string $path, \context_module $context): \stored_file {
+        $fs = get_file_storage();
+        do {
+            $itemid = random_int(1, 2147483647);
+        } while (!$fs->is_area_empty($context->id, self::COMPONENT, self::FILEAREA, $itemid));
+
+        $filerecord = [
+            'contextid' => $context->id,
+            'component' => self::COMPONENT,
+            'filearea' => self::FILEAREA,
+            'itemid' => $itemid,
+            'filepath' => '/',
+            'filename' => clean_filename(basename($path)),
+        ];
+        return $fs->create_file_from_pathname($filerecord, $path);
+    }
+
+    /**
      * Returns a staged upload by its item id, if present.
      *
      * @param \context_module $context The book's module context.

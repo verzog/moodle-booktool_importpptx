@@ -211,6 +211,33 @@ Sans or DejaVu Sans); otherwise a slightly more conservative estimate is used.
 Access to the importer is controlled by the `booktool/importpptx:import`
 capability. The background-task threshold defaults to 30 slides.
 
+## Using the importer from another plugin
+
+Other plugins can import a presentation without the upload form through
+`\booktool_importpptx\api`. The form depends on the logged-in user's draft files and session; the
+API does not, so it can be called from a scheduled or background task.
+
+```php
+use booktool_importpptx\api;
+
+if (class_exists(api::class) && api::API_VERSION >= 1) {
+    $cmid = api::find_activity($courseid, 'Week 1 slides')
+        ?: api::create_activity($courseid, 'Week 1 slides');
+    $count = api::import_path('/path/on/server/week1.pptx', $cmid, ['importmode' => 'editable']);
+}
+```
+
+- `import_path()` imports straight away, however many slides there are, adds the new
+  chapters after any existing ones, and leaves the file where it is. It accepts the same
+  options as the upload form.
+- `extensions()` and `import_modes()` say what this server can import (`pdf` and `images`
+  depend on the optional tools above).
+- The API checks no capability, because a background task has no user. The calling plugin
+  must decide who may start an import. Only pass it files from a location you trust.
+
+[Automate](https://github.com/verzog/moodle-tool_automate) uses this API to import a
+folder of presentations in bulk.
+
 ## Honest limits
 
 - PowerPoint gives **editable** chapters; PDF gives **image** chapters (one
