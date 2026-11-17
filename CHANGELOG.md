@@ -6,6 +6,14 @@ and the project follows semantic-ish versioning in `$plugin->release`. Routine
 follow-ups that only satisfied the code checker (phpcs/phpdoc) are folded into
 the release they belong to.
 
+## Unreleased
+
+### Added
+- An API class (`\booktool_importpptx\api`) that other plugins can call to import a presentation
+  from a file on the server into a book, and to find or create that book. It does not
+  depend on a logged-in user, so it works from a scheduled or background task.
+  `api::API_VERSION` is `1`.
+
 ## 1.17.0 – 2026-11-01
 
 ### Changed
